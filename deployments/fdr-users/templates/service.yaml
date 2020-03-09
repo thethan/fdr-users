@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "fdr-users.fullname" . }}
+  labels:
+    {{- include "fdr-users.labels" . | nindent 4 }}
+  annotations:
+    getambassador.io/config: |
+      ---
+      apiVersion: ambassador/v1
+      kind: Mapping
+      host: fantasydraftroom.com
+      name: {{ include "fdr-users.fullname" . }}-mapping
+      prefix: "/users/"
+      service: {{ include "fdr-users.fullname" . }}:{{ .Values.service.port }}
+      ---
+      apiVersion: ambassador/v1
+      kind: Mapping
+      host: fantasydraftroom.com
+      grpc: true
+      prefix: "/grpc/users/"
+      name: {{ include "fdr-users.fullname" . }}-grpc-mapping
+      service: {{ include "fdr-users.fullname" . }}:{{ .Values.service.grpc }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: {{ .Values.service.grpc }}
+      targetPort: grpc
+      protocol: TCP
+      name: grpc
+  selector:
+    {{- include "fdr-users.selectorLabels" . | nindent 4 }}
