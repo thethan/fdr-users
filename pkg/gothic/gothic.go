@@ -201,6 +201,8 @@ var CompleteUserAuth = func(res http.ResponseWriter, req *http.Request) (goth.Us
 		return goth.User{}, err
 	}
 
+	fmt.Println("storing in session")
+	fmt.Println(sess.Marshal())
 	err = StoreInSession(providerName, sess.Marshal(), req, res)
 
 	if err != nil {

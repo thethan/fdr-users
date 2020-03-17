@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"time"
 
 	"fmt"
 	"github.com/markbates/goth"
@@ -81,26 +82,35 @@ func (p *Provider) FetchUser(session goth.Session) (goth.User, error) {
 		return user, fmt.Errorf("%s cannot get user information without accessToken", p.providerName)
 	}
 
-	req, err := http.NewRequest("GET", endpointProfile, nil)
-	if err != nil {
-		return user, err
-	}
-	req.Header.Set("Authorization", "Bearer "+s.AccessToken)
-	resp, err := p.Client().Do(req)
-	if err != nil {
-		if resp != nil {
-			resp.Body.Close()
-		}
-		return user, err
-	}
-	defer resp.Body.Close()
+	//req, err := http.NewRequest("GET", endpointProfile, nil)
+	//if err != nil {
+	//	return user, err
+	//}
+	//req.Header.Set("Authorization", "Bearer "+s.AccessToken)
+	//resp, err := p.Client().Do(req)
+	//if err != nil {
+	//	if resp != nil {
+	//		resp.Body.Close()
+	//	}
+	//	return user, err
+	//}
+	//defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return user, fmt.Errorf("%s responded with a %d trying to fetch user information", p.providerName, resp.StatusCode)
+	//if resp.StatusCode != http.StatusOK {
+	//	return user, fmt.Errorf("%s responded with a %d trying to fetch user information", p.providerName, resp.StatusCode)
+	//}
+
+
+	// if time is > s.ExpiresAt - time.Second * 10
+	// refresh token
+	now := time.Now()
+	nowBuffered := now.Add(time.Minute - 10)
+	if s.ExpiresAt.After(nowBuffered) {
+
 	}
 
-	err = userFromReader(resp.Body, &user)
-	return user, err
+	//err = userFromReader(resp.Body, &user)
+	return user, nil
 }
 
 func newConfig(provider *Provider, scopes []string) *oauth2.Config {

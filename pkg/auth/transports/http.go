@@ -28,8 +28,6 @@ func MakeHTTPHandler(endpoints auth.Endpoints, m *mux.Router, options ...httptra
 	}
 	serverOptions = append(serverOptions, options...)
 
-	os.Setenv("SESSION_SECRET", "asdfh9252")
-
 	m.Methods("GET", "POST").Path("/auth").Handler(
 		httptransport.NewServer(
 			endpoints.Index,
@@ -40,7 +38,7 @@ func MakeHTTPHandler(endpoints auth.Endpoints, m *mux.Router, options ...httptra
 	m.Methods("GET", "POST").Path("/auth/{provider}/login").HandlerFunc(endpoints.Provider)
 
 	m.Methods("GET", "POST").Path("/auth/{provider}").HandlerFunc(endpoints.CompleteUserAuthHandler)
-	m.Methods("GET", "POST").Path("/users/auth/{provider}").HandlerFunc(endpoints.CompleteUserAuthHandler)
+	m.Methods("GET", "POST").Path("/auth/{provider}").HandlerFunc(endpoints.CompleteUserAuthHandler)
 
 	m.Methods("GET", "POST").Path("/auth/{provider}/logout").HandlerFunc(endpoints.Logout)
 	//m.Methods("GET", "POST").Path("/users/auth/login/{provider}").HandlerFunc(endpoints.Provider)

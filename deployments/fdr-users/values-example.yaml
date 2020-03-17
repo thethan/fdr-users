@@ -86,3 +86,5 @@ yahoo:
 session:
   secret: ""
   name: _gothic_session
+ambassador:
+  host: "localhost"

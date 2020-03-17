@@ -103,7 +103,7 @@ var indexTemplate = `{{range $key,$value:=.Providers}}
 {{end}}`
 
 var userTemplate = `
-<p><a href="/logout/{{.Provider}}">logout</a></p>
+<p><a href="/users/auth/logout/{{.Provider}}">logout</a></p>
 <p>Name: {{.Name}} [{{.LastName}}, {{.FirstName}}]</p>
 <p>Email: {{.Email}}</p>
 <p>NickName: {{.NickName}}</p>
