@@ -3,23 +3,30 @@ package handlers
 import (
 	"context"
 	"github.com/go-kit/kit/log"
+	"github.com/markbates/goth"
 	"github.com/thethan/fdr-users/pkg/auth"
 	"time"
 
 	pb "github.com/thethan/fdr_proto"
 )
 
+type GetUserInfo interface {
+	GetCredentialInformation(ctx context.Context, session string) (goth.User, error)
+}
+
 // NewService returns a naïve, stateless implementation of Service.
-func NewService(logger log.Logger, service *auth.Service) pb.UsersServer {
+func NewService(logger log.Logger, service *auth.Service, info GetUserInfo) pb.UsersServer {
 	return usersService{
 		logger:      logger,
 		authService: service,
+		userInfo: info,
 	}
 }
 
 type usersService struct {
 	logger      log.Logger
 	authService *auth.Service
+	userInfo    GetUserInfo
 }
 
 // Create implements Service.
@@ -61,7 +68,7 @@ func (s usersService) Credentials(ctx context.Context, in *pb.CredentialRequest)
 	resp = pb.CredentialResponse{
 		Token: &pb.Token{
 			AccessToken:          user.AccessToken,
-			RefreshToken:         user.AccessToken,
+			RefreshToken:         user.RefreshToken,
 			ExpiresIn:            int32(time.Now().Sub(user.ExpiresAt).Seconds()),
 			XXX_NoUnkeyedLiteral: struct{}{},
 			XXX_unrecognized:     nil,

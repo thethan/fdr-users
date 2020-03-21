@@ -3,9 +3,10 @@ package auth
 import (
 	"context"
 	"github.com/go-kit/kit/log"
-	"github.com/gorilla/sessions"
 	"github.com/markbates/goth"
+	"github.com/thethan/fdr-users/handlers"
 	"github.com/thethan/fdr-users/pkg/gothic"
+	"go.elastic.co/apm"
 	"google.golang.org/grpc/metadata"
 	"net/http"
 )
@@ -13,27 +14,24 @@ import (
 type Service struct {
 	log.Logger
 	providerName string
-	provider goth.Provider
+	provider     goth.Provider
+	getUserRepo  handlers.GetUserInfo
 }
-func NewService(logger log.Logger, provider goth.Provider) Service {
+
+func NewService(logger log.Logger, provider goth.Provider, info handlers.GetUserInfo) Service {
 	return Service{
 		providerName: "yahoo",
-		Logger:   logger,
-		provider: provider,
+		Logger:       logger,
+		provider:     provider,
+		getUserRepo:  info,
 	}
 }
 
 func (s Service) GetCredentialInformation(ctx context.Context, session string) (goth.User, error) {
-	req, err := http.NewRequest(http.MethodGet, "/", nil)
-	if err != nil {
-		return goth.User{}, err
-	}
-	cookie := sessions.NewCookie(gothic.SessionName, session, &sessions.Options{})
-
-	req.AddCookie(cookie)
-	return s.getUserFromHttp(req)
+	span, ctx := apm.StartSpan(ctx, "GetCredentialInformation", "service.method")
+	defer span.End()
+	return s.getUserRepo.GetCredentialInformation(ctx, session)
 }
-
 
 func (s Service) getUserFromGrpc(md metadata.MD) (goth.User, error) {
 	session := md.Get(gothic.SessionName)
@@ -44,7 +42,6 @@ func (s Service) getUserFromGrpc(md metadata.MD) (goth.User, error) {
 func (s Service) getUserFromHttp(req *http.Request) (goth.User, error) {
 	return s.getUserFromValues(req)
 }
-
 
 func (s Service) getUserFromValues(req *http.Request) (goth.User, error) {
 

@@ -16,6 +16,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/thethan/fdr-users/handlers"
 	"github.com/thethan/fdr-users/pkg/auth"
+	"github.com/thethan/fdr-users/vendor/github.com/markbates/goth"
 
 	"github.com/go-kit/kit/endpoint"
 
@@ -42,9 +43,13 @@ type Endpoints struct {
 	CredentialEndpoint endpoint.Endpoint
 }
 
+type GetUser interface {
+	GetCredentialInformation(ctx context.Context, session string) (goth.User, error)
+}
+
 // Endpoints
 
-func NewEndpoints(logger log.Logger, auth *auth.Service) Endpoints {
+func NewEndpoints(logger log.Logger, auth *auth.Service, ) Endpoints {
 	// Business domain.
 	var service pb.UsersServer
 	{
