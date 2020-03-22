@@ -5,3 +5,4 @@ metadata:
 data:
   SERVICE_ACCOUNT_FILE_LOCATION: /certs/serviceAccountKey.json
   ELASTIC_APM_SERVER_URL: {{ .Values.apm.url | quote }}
+  ELASTIC_APM_SECRET_TOKEN: {{ .Values.apm.token | quote }}

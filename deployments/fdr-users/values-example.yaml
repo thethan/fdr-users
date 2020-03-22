@@ -79,3 +79,4 @@ session:
   name: _gothic_session
 apm:
   url: "http://apm-server-apm-server"
+  token: "token"

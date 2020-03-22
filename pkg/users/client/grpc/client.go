@@ -79,13 +79,15 @@ func New(conn *grpc.ClientConn, options ...ClientOption) (pb.UsersServer, error)
 		loginEndpoint = grpctransport.NewClient(
 			conn,
 			"fdr.Users",
-			"Login",
+			"Credentials",
 			EncodeGRPCLoginRequest,
 			DecodeGRPCLoginResponse,
-			pb.LoginResponse{},
+			pb.CredentialResponse{},
 			clientOptions...,
 		).Endpoint()
 	}
+
+
 
 
 	return users.Endpoints{

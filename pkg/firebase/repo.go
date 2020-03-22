@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/thethan/fdr-users/handlers"
+	"github.com/thethan/fdr-users/pkg/users"
 
 	"go.elastic.co/apm"
 )
@@ -26,7 +26,7 @@ func NewFirebaseRepository(logger log.Logger, firestore *firestore.Client) Repo 
 
 const AccessKey = "access_token"
 
-func (r *Repo) GetCredentialInformation(ctx context.Context, session string) (handlers.User, error) {
+func (r *Repo) GetCredentialInformation(ctx context.Context, session string) (users.User, error) {
 	span, ctx := apm.StartSpan(ctx, "GetCredentialInformation", "db.firebase.init")
 	defer span.End()
 
@@ -34,19 +34,19 @@ func (r *Repo) GetCredentialInformation(ctx context.Context, session string) (ha
 	if docuRef == nil {
 		level.Error(r.logger).Log("message", "error in getting firestore docuref", "error", errors.New("yeah no docuref"))
 
-		return handlers.User{}, errors.New("connect ")
+		return users.User{}, errors.New("connect ")
 	}
 
 	snapShot, err := r.getDocumentReference(ctx, docuRef)
 	if err != nil {
 		level.Error(r.logger).Log("message", "error in getting firestore snapshot", "error", err)
 
-		return handlers.User{}, err
+		return users.User{}, err
 	}
 
 	if !snapShot.Exists() {
 		level.Error(r.logger).Log("message", "snapshot did not exist", "error", err)
-		return handlers.User{}, err
+		return users.User{}, err
 	}
 
 	var accessKey string
@@ -54,16 +54,16 @@ func (r *Repo) GetCredentialInformation(ctx context.Context, session string) (ha
 	keyInterface, ok := data[AccessKey]
 	if !ok {
 		level.Error(r.logger).Log("message", "data did not have access key", )
-		return handlers.User{}, errors.New("goth did not have access key")
+		return users.User{}, errors.New("goth did not have access key")
 	}
 
 	accessKey, ok = keyInterface.(string)
 	if !ok {
 		_ = level.Error(r.logger).Log("message", "access key is not a string ", )
-		return handlers.User{}, errors.New("access key was not a string")
+		return users.User{}, errors.New("access key was not a string")
 	}
 
-	return handlers.User{AccessToken: accessKey}, nil
+	return users.User{AccessToken: accessKey}, nil
 }
 
 func (r *Repo) getDocumentReference(ctx context.Context, docuRef *firestore.DocumentRef) (*firestore.DocumentSnapshot, error) {

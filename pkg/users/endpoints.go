@@ -14,8 +14,6 @@ import (
 	"context"
 	"github.com/go-kit/kit/endpoint"
 	"github.com/go-kit/kit/log"
-	"github.com/thethan/fdr-users/handlers"
-	"github.com/thethan/fdr-users/pkg/auth"
 	pb "github.com/thethan/fdr_proto"
 	"go.elastic.co/apm"
 )
@@ -43,11 +41,11 @@ type Endpoints struct {
 
 // Endpoints
 
-func NewEndpoints(logger log.Logger, auth *auth.Service, user handlers.GetUserInfo) Endpoints {
+func NewEndpoints(logger log.Logger,  user GetUserInfo) Endpoints {
 	// Business domain.
 	var service pb.UsersServer
 	{
-		service = handlers.NewService(logger, auth)
+		service = NewService(logger, user)
 		// Wrap Service with middlewares. See handlers/middlewares.go
 		//service = handlers.WrapService(service)
 	}
@@ -115,7 +113,7 @@ func MakeLoginEndpoint(s pb.UsersServer) endpoint.Endpoint {
 	}
 }
 
-func MakeCredentialsEndpoint(s pb.UsersServer, user handlers.GetUserInfo) endpoint.Endpoint {
+func MakeCredentialsEndpoint(s pb.UsersServer, user GetUserInfo) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		span, ctx := apm.StartSpan(ctx, "CredentialsEndpoint", "endpoint")
 		defer span.End()

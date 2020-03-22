@@ -56,9 +56,9 @@ var logrusLogger = &logrus.Logger{
 
 func init() {
 	flag.StringVar(&DefaultConfig.DebugAddr, "debug.addr", ":8080", "Debug and metrics listen address")
-	flag.StringVar(&DefaultConfig.HTTPAddr, "http.addr", ":80", "HTTP listen address")
+	flag.StringVar(&DefaultConfig.HTTPAddr, "http.addr", ":8081", "HTTP listen address")
 	flag.StringVar(&DefaultConfig.GRPCAddr, "grpc.addr", ":8082", "gRPC (HTTP) listen address")
-	flag.StringVar(&DefaultConfig.ServiceAccountFileLocation, "service account file location", "/certs/serviceAccountKey.json", "used for your firebase location")
+	flag.StringVar(&DefaultConfig.ServiceAccountFileLocation, "service account file location", "/Users/ethan/Code/fdr-users/serviceAccountKey.json", "used for your firebase location")
 	// Use environment variables, if set. Flags have priority over Env vars.
 	if addr := os.Getenv("DEBUG_ADDR"); addr != "" {
 		DefaultConfig.DebugAddr = addr
@@ -146,9 +146,8 @@ func main() {
 	firestoreclient := initializeAppDefault(ctx, DefaultConfig, logger)
 	repo := firebase2.NewFirebaseRepository(logger, firestoreclient)
 
-	authService := auth.NewService(logger, &repo)
 
-	endpoints := users.NewEndpoints(logger, &authService, &repo)
+	endpoints := users.NewEndpoints(logger, &repo)
 
 
 	// Mechanical domain.

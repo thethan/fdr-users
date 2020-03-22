@@ -14,7 +14,8 @@ ENV GOPRIVATE "github.com/thethan"
 ENV GITHUB_TOKEN "1c909977e86be4c8b2a9ab4a495731787f2713c2"
 
 RUN git config --global url."https://thethan:${GITHUB_TOKEN}@github.com".insteadOf "https://github.com"
-ADD ./serviceAccountKey.json /certs/serviceAccountKey.json
+RUN mkdir /certs/
+ADD serviceAccountKey.json /certs/serviceAccountKey.json
 RUN go mod vendor
 
 RUN go build cmd/fdr-users/main.go
