@@ -3,30 +3,27 @@ package handlers
 import (
 	"context"
 	"github.com/go-kit/kit/log"
-	"github.com/markbates/goth"
-	"github.com/thethan/fdr-users/pkg/auth"
+	"go.elastic.co/apm"
 	"time"
 
 	pb "github.com/thethan/fdr_proto"
 )
 
 type GetUserInfo interface {
-	GetCredentialInformation(ctx context.Context, session string) (goth.User, error)
+	GetCredentialInformation(ctx context.Context, session string) (User, error)
 }
 
 // NewService returns a naïve, stateless implementation of Service.
-func NewService(logger log.Logger, service *auth.Service, info GetUserInfo) pb.UsersServer {
+func NewService(logger log.Logger, info GetUserInfo) pb.UsersServer {
 	return usersService{
-		logger:      logger,
-		authService: service,
+		logger:   logger,
 		userInfo: info,
 	}
 }
 
 type usersService struct {
-	logger      log.Logger
-	authService *auth.Service
-	userInfo    GetUserInfo
+	logger   log.Logger
+	userInfo GetUserInfo
 }
 
 // Create implements Service.
@@ -58,9 +55,11 @@ func (s usersService) Login(ctx context.Context, in *pb.LoginRequest) (*pb.Login
 }
 
 func (s usersService) Credentials(ctx context.Context, in *pb.CredentialRequest) (*pb.CredentialResponse, error) {
-	var resp pb.CredentialResponse
+	span, ctx := apm.StartSpan(ctx, "Credentials", "handlers.service")
+	defer span.End()
 
-	user, err := s.authService.GetCredentialInformation(ctx, in.Session)
+	var resp pb.CredentialResponse
+	user, err := s.userInfo.GetCredentialInformation(ctx, in.Session)
 	if err != nil {
 		return nil, err
 	}

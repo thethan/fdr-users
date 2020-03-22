@@ -3,7 +3,5 @@ kind: ConfigMap
 metadata:
   name: {{ include "fdr-users.fullname" . }}
 data:
-  SESSION_SECRET: {{ .Values.session.secret | quote }}
-  YAHOO_SECRET: {{ .Values.yahoo.secret | quote }}
-  YAHOO_KEY: {{ .Values.yahoo.key | quote }}
-  YAHOO_CALLBACK: {{ .Values.yahoo.callback | quote }}
+  SERVICE_ACCOUNT_FILE_LOCATION: /certs/serviceAccountKey.json
+  ELASTIC_APM_SERVER_URL: {{ .Values.apm.url | quote }}

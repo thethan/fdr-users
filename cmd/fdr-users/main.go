@@ -7,18 +7,18 @@ import (
 	"flag"
 	"fmt"
 	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	firebase2 "github.com/thethan/fdr-users/pkg/firebase"
-	"github.com/thethan/fdr-users/vendor/github.com/go-kit/kit/log/level"
+	"go.elastic.co/apm/module/apmgrpc"
+	"go.elastic.co/apm/module/apmhttp"
 	"google.golang.org/api/option"
 
 	firebase "firebase.google.com/go"
 	gokitLogrus "github.com/go-kit/kit/log/logrus"
 	"github.com/gorilla/mux"
-	"github.com/markbates/goth"
 	"github.com/sirupsen/logrus"
 	"github.com/thethan/fdr-users/pkg/auth"
 	"github.com/thethan/fdr-users/pkg/auth/transports"
-	"github.com/thethan/fdr-users/pkg/gothic/yahoo"
 	"go.elastic.co/apm"
 	"go.elastic.co/apm/module/apmlogrus"
 	"io/ioutil"
@@ -58,7 +58,7 @@ func init() {
 	flag.StringVar(&DefaultConfig.DebugAddr, "debug.addr", ":8080", "Debug and metrics listen address")
 	flag.StringVar(&DefaultConfig.HTTPAddr, "http.addr", ":80", "HTTP listen address")
 	flag.StringVar(&DefaultConfig.GRPCAddr, "grpc.addr", ":8082", "gRPC (HTTP) listen address")
-	flag.StringVar(&DefaultConfig.ServiceAccountFileLocation, "service account file location", "./serviceAccountKey.json", "used for your firebase location")
+	flag.StringVar(&DefaultConfig.ServiceAccountFileLocation, "service account file location", "/certs/serviceAccountKey.json", "used for your firebase location")
 	// Use environment variables, if set. Flags have priority over Env vars.
 	if addr := os.Getenv("DEBUG_ADDR"); addr != "" {
 		DefaultConfig.DebugAddr = addr
@@ -139,21 +139,16 @@ func readJsonFile(cfg Config) serviceAccount {
 func main() {
 	ctx := context.Background()
 
-	yahooProvider := yahoo.New(os.Getenv("YAHOO_KEY"), os.Getenv("YAHOO_SECRET"), os.Getenv("YAHOO_CALLBACK"))
-	yahooProvider.SetName("yahoo")
-	goth.UseProviders(
-		yahooProvider,
-	)
-	authEndpoint := auth.NewEndpoints(yahooProvider)
-
 	logger := gokitLogrus.NewLogrusLogger(logrusLogger)
 	logger = log.WithPrefix(logger, "caller_a", log.DefaultCaller, "caller_b", log.Caller(2), "caller_c", log.Caller(1))
+	authEndpoint := auth.NewEndpoints(logger)
+
 	firestoreclient := initializeAppDefault(ctx, DefaultConfig, logger)
 	repo := firebase2.NewFirebaseRepository(logger, firestoreclient)
 
-	authService := auth.NewService(logger, yahooProvider, repo)
+	authService := auth.NewService(logger, &repo)
 
-	endpoints := users.NewEndpoints(logger, &authService)
+	endpoints := users.NewEndpoints(logger, &authService, &repo)
 
 
 	// Mechanical domain.
@@ -192,7 +187,7 @@ func main() {
 			return nil
 		})
 
-		errc <- http.ListenAndServe(DefaultConfig.HTTPAddr, m)
+		errc <- http.ListenAndServe(DefaultConfig.HTTPAddr, apmhttp.Wrap(m))
 	}()
 
 	// gRPC transport.
@@ -205,7 +200,7 @@ func main() {
 		}
 
 		srv := users.MakeGRPCServer(endpoints)
-		s := grpc.NewServer()
+		s := grpc.NewServer(grpc.UnaryInterceptor(apmgrpc.NewUnaryServerInterceptor()))
 		pb.RegisterUsersServer(s, srv)
 
 		errc <- s.Serve(ln)

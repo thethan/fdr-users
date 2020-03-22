@@ -10,13 +10,6 @@ metadata:
       apiVersion: ambassador/v1
       kind: Mapping
       host: {{ .Values.ambassador.host }}
-      name: {{ include "fdr-users.fullname" . }}-mapping
-      prefix: "/users/"
-      service: {{ include "fdr-users.fullname" . }}:{{ .Values.service.port }}
-      ---
-      apiVersion: ambassador/v1
-      kind: Mapping
-      host: {{ .Values.ambassador.host }}
       grpc: true
       prefix: "/grpc/users/"
       name: {{ include "fdr-users.fullname" . }}-grpc-mapping

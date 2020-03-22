@@ -12,15 +12,12 @@ package users
 
 import (
 	"context"
-	"fmt"
+	"github.com/go-kit/kit/endpoint"
 	"github.com/go-kit/kit/log"
 	"github.com/thethan/fdr-users/handlers"
 	"github.com/thethan/fdr-users/pkg/auth"
-	"github.com/thethan/fdr-users/vendor/github.com/markbates/goth"
-
-	"github.com/go-kit/kit/endpoint"
-
 	pb "github.com/thethan/fdr_proto"
+	"go.elastic.co/apm"
 )
 
 // Endpoints collects all of the endpoints that compose an add service. It's
@@ -41,15 +38,12 @@ type Endpoints struct {
 	SearchEndpoint     endpoint.Endpoint
 	LoginEndpoint      endpoint.Endpoint
 	CredentialEndpoint endpoint.Endpoint
-}
-
-type GetUser interface {
-	GetCredentialInformation(ctx context.Context, session string) (goth.User, error)
+	logger             log.Logger
 }
 
 // Endpoints
 
-func NewEndpoints(logger log.Logger, auth *auth.Service, ) Endpoints {
+func NewEndpoints(logger log.Logger, auth *auth.Service, user handlers.GetUserInfo) Endpoints {
 	// Business domain.
 	var service pb.UsersServer
 	{
@@ -63,10 +57,11 @@ func NewEndpoints(logger log.Logger, auth *auth.Service, ) Endpoints {
 		createEndpoint         = MakeCreateEndpoint(service)
 		searchEndpoint         = MakeSearchEndpoint(service)
 		loginEndpoint          = MakeLoginEndpoint(service)
-		getCredentialsEndpoint = MakeCredentialsEndpoint(service)
+		getCredentialsEndpoint = MakeCredentialsEndpoint(service, user)
 	)
 
 	endpoints := Endpoints{
+		logger:             logger,
 		CreateEndpoint:     createEndpoint,
 		SearchEndpoint:     searchEndpoint,
 		LoginEndpoint:      loginEndpoint,
@@ -77,30 +72,12 @@ func NewEndpoints(logger log.Logger, auth *auth.Service, ) Endpoints {
 	return endpoints
 }
 
-func (e Endpoints) Create(ctx context.Context, in *pb.CreateUserRequest) (*pb.CreateUserResponse, error) {
-	//return e.CreateEndpoint(ctx, in)
-	return nil, nil
-}
-
-func (e Endpoints) Search(ctx context.Context, in *pb.ListUserRequest) (*pb.ListUserResponse, error) {
-	//return e.SearchEndpoint(ctx, in)
-	return nil, nil
-}
-
-func (e Endpoints) Login(ctx context.Context, in *pb.LoginRequest) (*pb.LoginResponse, error) {
-	//e.LoginEndpoint(ctx, in)
-	return nil, nil
-}
-
-func (e Endpoints) Credentials(ctx context.Context, in *pb.CredentialRequest) (*pb.CredentialResponse, error) {
-	//e.LoginEndpoint(ctx, in)
-	return nil, nil
-}
-
 // Make Endpoints
-
 func MakeCreateEndpoint(s pb.UsersServer) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		span, ctx := apm.StartSpan(ctx, "CreateEndpoint", "endpoint")
+		defer span.End()
+
 		req := request.(*pb.CreateUserRequest)
 		v, err := s.Create(ctx, req)
 		if err != nil {
@@ -112,6 +89,9 @@ func MakeCreateEndpoint(s pb.UsersServer) endpoint.Endpoint {
 
 func MakeSearchEndpoint(s pb.UsersServer) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		span, ctx := apm.StartSpan(ctx, "ListEndpoint", "endpoint")
+		defer span.End()
+
 		req := request.(*pb.ListUserRequest)
 		v, err := s.Search(ctx, req)
 		if err != nil {
@@ -123,6 +103,9 @@ func MakeSearchEndpoint(s pb.UsersServer) endpoint.Endpoint {
 
 func MakeLoginEndpoint(s pb.UsersServer) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		span, ctx := apm.StartSpan(ctx, "LoginEndpoint", "endpoint")
+		defer span.End()
+
 		req := request.(*pb.LoginRequest)
 		v, err := s.Login(ctx, req)
 		if err != nil {
@@ -132,85 +115,16 @@ func MakeLoginEndpoint(s pb.UsersServer) endpoint.Endpoint {
 	}
 }
 
-func MakeCredentialsEndpoint(s pb.UsersServer) endpoint.Endpoint {
+func MakeCredentialsEndpoint(s pb.UsersServer, user handlers.GetUserInfo) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		span, ctx := apm.StartSpan(ctx, "CredentialsEndpoint", "endpoint")
+		defer span.End()
+
 		req := request.(*pb.CredentialRequest)
 		v, err := s.Credentials(ctx, req)
 		if err != nil {
 			return nil, err
 		}
 		return v, nil
-	}
-}
-
-// WrapAllExcept wraps each Endpoint field of struct Endpoints with a
-// go-kit/kit/endpoint.Middleware.
-// Use this for applying a set of middlewares to every endpoint in the service.
-// Optionally, endpoints can be passed in by name to be excluded from being wrapped.
-// WrapAllExcept(middleware, "Status", "Ping")
-func (e *Endpoints) WrapAllExcept(middleware endpoint.Middleware, excluded ...string) {
-	included := map[string]struct{}{
-		"Create":      struct{}{},
-		"Search":      struct{}{},
-		"Login":       struct{}{},
-		"Credentials": struct{}{},
-	}
-
-	for _, ex := range excluded {
-		if _, ok := included[ex]; !ok {
-			panic(fmt.Sprintf("Excluded endpoint '%s' does not exist; see middlewares/endpoints.go", ex))
-		}
-		delete(included, ex)
-	}
-
-	for inc, _ := range included {
-		if inc == "Create" {
-			e.CreateEndpoint = middleware(e.CreateEndpoint)
-		}
-		if inc == "Search" {
-			e.SearchEndpoint = middleware(e.SearchEndpoint)
-		}
-		if inc == "Login" {
-			e.LoginEndpoint = middleware(e.LoginEndpoint)
-		}
-		if inc == "Credentials" {
-			e.CredentialEndpoint = middleware(e.CredentialEndpoint)
-		}
-	}
-}
-
-// LabeledMiddleware will get passed the endpoint name when passed to
-// WrapAllLabeledExcept, this can be used to write a generic metrics
-// middleware which can send the endpoint name to the metrics collector.
-type LabeledMiddleware func(string, endpoint.Endpoint) endpoint.Endpoint
-
-// WrapAllLabeledExcept wraps each Endpoint field of struct Endpoints with a
-// LabeledMiddleware, which will receive the name of the endpoint. See
-// LabeldMiddleware. See method WrapAllExept for details on excluded
-// functionality.
-func (e *Endpoints) WrapAllLabeledExcept(middleware func(string, endpoint.Endpoint) endpoint.Endpoint, excluded ...string) {
-	included := map[string]struct{}{
-		"Create": struct{}{},
-		"Search": struct{}{},
-		"Login":  struct{}{},
-	}
-
-	for _, ex := range excluded {
-		if _, ok := included[ex]; !ok {
-			panic(fmt.Sprintf("Excluded endpoint '%s' does not exist; see middlewares/endpoints.go", ex))
-		}
-		delete(included, ex)
-	}
-
-	for inc, _ := range included {
-		if inc == "Create" {
-			e.CreateEndpoint = middleware("Create", e.CreateEndpoint)
-		}
-		if inc == "Search" {
-			e.SearchEndpoint = middleware("Search", e.SearchEndpoint)
-		}
-		if inc == "Login" {
-			e.LoginEndpoint = middleware("Login", e.LoginEndpoint)
-		}
 	}
 }
