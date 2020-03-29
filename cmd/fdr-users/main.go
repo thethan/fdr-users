@@ -4,28 +4,26 @@ import (
 	"cloud.google.com/go/firestore"
 	"context"
 	"encoding/json"
+	firebaseAuth "firebase.google.com/go/auth"
 	"flag"
 	"fmt"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/grpc-ecosystem/go-grpc-middleware"
+	grpc_auth "github.com/grpc-ecosystem/go-grpc-middleware/auth"
 	firebase2 "github.com/thethan/fdr-users/pkg/firebase"
 	"go.elastic.co/apm/module/apmgrpc"
-	"go.elastic.co/apm/module/apmhttp"
 	"google.golang.org/api/option"
 
 	firebase "firebase.google.com/go"
 	gokitLogrus "github.com/go-kit/kit/log/logrus"
-	"github.com/gorilla/mux"
 	"github.com/sirupsen/logrus"
 	"github.com/thethan/fdr-users/pkg/auth"
-	"github.com/thethan/fdr-users/pkg/auth/transports"
 	"go.elastic.co/apm"
 	"go.elastic.co/apm/module/apmlogrus"
 	"io/ioutil"
 
 	"net"
-	"net/http"
-	"net/http/pprof"
 	"os"
 
 	// 3d Party
@@ -141,53 +139,20 @@ func main() {
 
 	logger := gokitLogrus.NewLogrusLogger(logrusLogger)
 	logger = log.WithPrefix(logger, "caller_a", log.DefaultCaller, "caller_b", log.Caller(2), "caller_c", log.Caller(1))
-	authEndpoint := auth.NewEndpoints(logger)
 
-	firestoreclient := initializeAppDefault(ctx, DefaultConfig, logger)
+	firestoreclient, firebaseauthclient := initializeAppDefault(ctx, DefaultConfig, logger)
+
 	repo := firebase2.NewFirebaseRepository(logger, firestoreclient)
+	authRepo := firebase2.NewFirestoreAuthRepo(logger, firebaseauthclient)
 
-
+	authSvc := auth.NewAuthService(logger, &authRepo)
 	endpoints := users.NewEndpoints(logger, &repo)
-
 
 	// Mechanical domain.
 	errc := make(chan error)
 
 	// Interrupt handler.
 	go handlers.InterruptHandler(errc)
-
-	// Debug listener.
-	go func() {
-		logger.Log("transport", "debug", "addr", DefaultConfig.DebugAddr)
-
-		m := http.NewServeMux()
-		m.Handle("/debug/pprof/", http.HandlerFunc(pprof.Index))
-		m.Handle("/debug/pprof/cmdline", http.HandlerFunc(pprof.Cmdline))
-		m.Handle("/debug/pprof/profile", http.HandlerFunc(pprof.Profile))
-		m.Handle("/debug/pprof/symbol", http.HandlerFunc(pprof.Symbol))
-		m.Handle("/debug/pprof/trace", http.HandlerFunc(pprof.Trace))
-
-		errc <- http.ListenAndServe(DefaultConfig.DebugAddr, m)
-	}()
-
-	// HTTP transport.
-	go func() {
-		logger.Log("transport", "HTTP", "addr", DefaultConfig.HTTPAddr)
-		m := mux.NewRouter()
-
-		m = users.MakeHTTPHandler(endpoints, m)
-		m = transports.MakeHTTPHandler(authEndpoint, m)
-
-		m.Walk(func(route *mux.Route, router *mux.Router, ancestors []*mux.Route) error {
-
-			fmt.Println(route.GetName())
-			fmt.Println(route.GetPathRegexp())
-			fmt.Println(route.GetMethods())
-			return nil
-		})
-
-		errc <- http.ListenAndServe(DefaultConfig.HTTPAddr, apmhttp.Wrap(m))
-	}()
 
 	// gRPC transport.
 	go func() {
@@ -199,7 +164,13 @@ func main() {
 		}
 
 		srv := users.MakeGRPCServer(endpoints)
-		s := grpc.NewServer(grpc.UnaryInterceptor(apmgrpc.NewUnaryServerInterceptor()))
+
+		authInterceptor := grpc_auth.UnaryServerInterceptor(authSvc.ServerAuthentication(ctx, logger))
+		apmInterceptor := apmgrpc.NewUnaryServerInterceptor()
+		middlewareInterceptor := grpc_middleware.ChainUnaryServer(apmInterceptor, authInterceptor, )
+
+		//grpc.UnaryInterceptor(grpc_auth.UnaryServerInterceptor(authSvc.ServerAuthentication(ctx, logger))
+		s := grpc.NewServer(grpc.UnaryInterceptor(middlewareInterceptor))
 		pb.RegisterUsersServer(s, srv)
 
 		errc <- s.Serve(ln)
@@ -209,19 +180,40 @@ func main() {
 	logger.Log("exit", <-errc)
 }
 
-func initializeAppDefault(ctx context.Context, config Config, logger log.Logger) *firestore.Client {
-
+func initializeAppDefault(ctx context.Context, config Config, logger log.Logger) (*firestore.Client, *firebaseAuth.Client) {
 	sa := option.WithCredentialsFile(config.ServiceAccountFileLocation)
 	app, err := firebase.NewApp(ctx, nil, sa)
 	if err != nil {
 		level.Error(logger).Log("message", "error in setting up firebase")
 		os.Exit(1)
 	}
+	firestoreClient := initializeFirestore(ctx, logger, app)
+
+	firebaseAuthClient := initializeFirebaseAuth(ctx, logger, app)
+
+	return firestoreClient, firebaseAuthClient
+}
+
+func initializeFirestore(ctx context.Context, logger log.Logger, app *firebase.App) *firestore.Client {
+
 	firestoreClient, err := app.Firestore(ctx)
 	if err != nil {
 		level.Error(logger).Log("message", "error in setting up firestore")
 
 		os.Exit(1)
 	}
+
 	return firestoreClient
+}
+
+func initializeFirebaseAuth(ctx context.Context, logger log.Logger, app *firebase.App) *firebaseAuth.Client {
+
+	firebaseAuthClient, err := app.Auth(ctx)
+	if err != nil {
+		level.Error(logger).Log("message", "error in setting up firestore")
+
+		os.Exit(1)
+	}
+
+	return firebaseAuthClient
 }

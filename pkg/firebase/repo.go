@@ -26,11 +26,11 @@ func NewFirebaseRepository(logger log.Logger, firestore *firestore.Client) Repo 
 
 const AccessKey = "access_token"
 
-func (r *Repo) GetCredentialInformation(ctx context.Context, session string) (users.User, error) {
+func (r *Repo) GetCredentialInformation(ctx context.Context, uid string) (users.User, error) {
 	span, ctx := apm.StartSpan(ctx, "GetCredentialInformation", "db.firebase.init")
 	defer span.End()
 
-	docuRef := r.firestore.Doc(fmt.Sprintf("users/%s", session))
+	docuRef := r.firestore.Doc(fmt.Sprintf("users/%s", uid))
 	if docuRef == nil {
 		level.Error(r.logger).Log("message", "error in getting firestore docuref", "error", errors.New("yeah no docuref"))
 
