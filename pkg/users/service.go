@@ -2,6 +2,8 @@ package users
 
 import (
 	"context"
+	"errors"
+	firebaseAuth "firebase.google.com/go/auth"
 	"github.com/go-kit/kit/log"
 	"go.elastic.co/apm"
 	"time"
@@ -59,7 +61,14 @@ func (s usersService) Credentials(ctx context.Context, in *pb.CredentialRequest)
 	defer span.End()
 
 	var resp pb.CredentialResponse
-	user, err := s.userInfo.GetCredentialInformation(ctx, in.Session)
+	// ctx will have token
+	tokenInterface := ctx.Value("firebase_token")
+
+	token, ok := tokenInterface.(*firebaseAuth.Token)
+	if !ok {
+		return nil, errors.New("failure to get user token")
+	}
+	user, err := s.userInfo.GetCredentialInformation(ctx, token.UID)
 	if err != nil {
 		return nil, err
 	}
@@ -69,9 +78,6 @@ func (s usersService) Credentials(ctx context.Context, in *pb.CredentialRequest)
 			AccessToken:          user.AccessToken,
 			RefreshToken:         user.RefreshToken,
 			ExpiresIn:            int32(time.Now().Sub(user.ExpiresAt).Seconds()),
-			XXX_NoUnkeyedLiteral: struct{}{},
-			XXX_unrecognized:     nil,
-			XXX_sizecache:        0,
 		},
 	}
 	return &resp, nil
