@@ -28,6 +28,5 @@ func (fT FirestoreTokenRepo) VerifyIDToken(ctx context.Context, idToken string) 
 		return ctx, err
 	}
 	ctx = context.WithValue(ctx, "firebase_token", token)
-
 	return ctx, nil
 }

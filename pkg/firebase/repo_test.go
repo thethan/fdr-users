@@ -25,7 +25,6 @@ func TestFirebase(t *testing.T) {
 
 	repo := NewFirebaseRepository(logger, firestoreClient)
 
-	user, err := repo.GetCredentialInformation(ctx, "wFR8UW1HQKNFsIdmbscAbxztciP2")
 	assert.Nil(t, err)
 
 	assert.NotEqual(t, "", user.AccessToken, )

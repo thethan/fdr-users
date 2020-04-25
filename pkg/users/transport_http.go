@@ -46,32 +46,46 @@ var (
 
 // MakeHTTPHandler returns a handler that makes a set of endpoints available
 // on predefined paths.
-func MakeHTTPHandler(endpoints Endpoints, m *mux.Router, options ...httptransport.ServerOption)  *mux.Router {
+func MakeHTTPHandler(endpoints Endpoints, m *mux.Router, authServerBefore httptransport.RequestFunc, options ...httptransport.ServerOption) *mux.Router {
 	serverOptions := []httptransport.ServerOption{
 		httptransport.ServerBefore(headersToContext),
 		httptransport.ServerErrorEncoder(errorEncoder),
 		httptransport.ServerAfter(httptransport.SetContentType(contentType)),
+
 	}
 	serverOptions = append(serverOptions, options...)
+	serverOptionsAuth := append(serverOptions, httptransport.ServerBefore(authServerBefore))
 
 	m = m.PathPrefix("/users").Subrouter()
 	m.Methods("POST").Path("/auth").Handler(httptransport.NewServer(
 		endpoints.CreateEndpoint,
 		DecodeHTTPCreateZeroRequest,
 		EncodeHTTPGenericResponse,
-		serverOptions...,
+		serverOptionsAuth...,
 	))
 
 	m.Methods("POST").Path("/search").Handler(httptransport.NewServer(
 		endpoints.SearchEndpoint,
 		DecodeHTTPSearchZeroRequest,
 		EncodeHTTPGenericResponse,
-		serverOptions...,
+		serverOptionsAuth...,
 	))
 
 	m.Methods("POST").Path("/login").Handler(httptransport.NewServer(
 		endpoints.LoginEndpoint,
 		DecodeHTTPLoginZeroRequest,
+		EncodeHTTPGenericResponse,
+		serverOptionsAuth...,
+	))
+	m.Methods("POST").Path("/credentials").Handler(httptransport.NewServer(
+		endpoints.SaveCredentialEndpoint,
+		DecodeHTTPSaveCredentialRequest,
+		EncodeHTTPGenericResponse,
+		serverOptionsAuth...,
+	))
+	m.Methods("POST").Path("/info").Handler(httptransport.NewServer(
+		endpoints.SaveUserInfoEndpoint,
+		DecodeHTTPSaveCredentialByUserIDRequest,
 		EncodeHTTPGenericResponse,
 		serverOptions...,
 	))
@@ -265,4 +279,74 @@ func headersToContext(ctx context.Context, r *http.Request) context.Context {
 	ctx = context.WithValue(ctx, "transport", "HTTPJSON")
 
 	return ctx
+}
+
+type UserCredentialRequest struct {
+	UID          string `json:"uid"`
+	Session      string `json:"session"`
+	RefreshToken string `json:"refresh_token"`
+	Email        string `json:"email"`
+}
+
+func DecodeHTTPSaveCredentialByUserIDRequest(_ context.Context, r *http.Request) (interface{}, error) {
+	defer r.Body.Close()
+	var req UserCredentialRequest
+	buf, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		return nil, errors.Wrapf(err, "cannot read body of http request")
+	}
+	if len(buf) > 0 {
+		// AllowUnknownFields stops the unmarshaler from failing if the JSON contains unknown fields.
+		if err = json.Unmarshal(buf, &req); err != nil {
+			const size = 8196
+			if len(buf) > size {
+				buf = buf[:size]
+			}
+			return nil, httpError{errors.Wrapf(err, "request body '%s': cannot parse non-json request body", buf),
+				http.StatusBadRequest,
+				nil,
+			}
+		}
+	}
+
+	pathParams := mux.Vars(r)
+	_ = pathParams
+
+	queryParams := r.URL.Query()
+	_ = queryParams
+
+	return &req, err
+}
+
+func DecodeHTTPSaveCredentialRequest(_ context.Context, r *http.Request) (interface{}, error) {
+	defer r.Body.Close()
+	var req pb.CredentialRequest
+	buf, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		return nil, errors.Wrapf(err, "cannot read body of http request")
+	}
+	if len(buf) > 0 {
+		// AllowUnknownFields stops the unmarshaler from failing if the JSON contains unknown fields.
+		unmarshaller := jsonpb.Unmarshaler{
+			AllowUnknownFields: true,
+		}
+		if err = unmarshaller.Unmarshal(bytes.NewBuffer(buf), &req); err != nil {
+			const size = 8196
+			if len(buf) > size {
+				buf = buf[:size]
+			}
+			return nil, httpError{errors.Wrapf(err, "request body '%s': cannot parse non-json request body", buf),
+				http.StatusBadRequest,
+				nil,
+			}
+		}
+	}
+
+	pathParams := mux.Vars(r)
+	_ = pathParams
+
+	queryParams := r.URL.Query()
+	_ = queryParams
+
+	return &req, err
 }

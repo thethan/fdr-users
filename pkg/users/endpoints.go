@@ -14,6 +14,7 @@ import (
 	"context"
 	"github.com/go-kit/kit/endpoint"
 	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/transport/http"
 	pb "github.com/thethan/fdr_proto"
 	"go.elastic.co/apm"
 )
@@ -32,38 +33,43 @@ import (
 // single type that implements the Service interface. For example, you might
 // construct individual endpoints using transport/http.NewClient, combine them into an Endpoints, and return it to the caller as a Service.
 type Endpoints struct {
-	CreateEndpoint     endpoint.Endpoint
-	SearchEndpoint     endpoint.Endpoint
-	LoginEndpoint      endpoint.Endpoint
-	CredentialEndpoint endpoint.Endpoint
-	logger             log.Logger
+	CreateEndpoint         endpoint.Endpoint
+	SearchEndpoint         endpoint.Endpoint
+	LoginEndpoint          endpoint.Endpoint
+	CredentialEndpoint     endpoint.Endpoint
+	SaveCredentialEndpoint endpoint.Endpoint
+	SaveUserInfoEndpoint   endpoint.Endpoint
+	logger                 log.Logger
 }
 
 // Endpoints
 
-func NewEndpoints(logger log.Logger,  user GetUserInfo) Endpoints {
+func NewEndpoints(logger log.Logger, user GetUserInfo, saveInfo SaveUserInfo, authMiddleware endpoint.Middleware, serverBefore http.RequestFunc) Endpoints {
 	// Business domain.
-	var service pb.UsersServer
+	var service usersService
 	{
-		service = NewService(logger, user)
-		// Wrap Service with middlewares. See handlers/middlewares.go
-		//service = handlers.WrapService(service)
+		service = NewService(logger, user, saveInfo)
+
 	}
 
 	// Endpoint domain.
 	var (
-		createEndpoint         = MakeCreateEndpoint(service)
-		searchEndpoint         = MakeSearchEndpoint(service)
-		loginEndpoint          = MakeLoginEndpoint(service)
-		getCredentialsEndpoint = MakeCredentialsEndpoint(service, user)
+		createEndpoint          = MakeCreateEndpoint(&service)
+		searchEndpoint          = MakeSearchEndpoint(&service)
+		loginEndpoint           = MakeLoginEndpoint(&service)
+		getCredentialsEndpoint  = MakeCredentialsEndpoint(&service, user)
+		saveCredentialsEndpoint = authMiddleware(MakeSaveCredentialsEndpoint(&service))
+		saveUserInfoEndpoint    = MakeSaveInformationsEndpoint(&service)
 	)
 
 	endpoints := Endpoints{
-		logger:             logger,
-		CreateEndpoint:     createEndpoint,
-		SearchEndpoint:     searchEndpoint,
-		LoginEndpoint:      loginEndpoint,
-		CredentialEndpoint: getCredentialsEndpoint,
+		logger:                 logger,
+		CreateEndpoint:         createEndpoint,
+		SearchEndpoint:         searchEndpoint,
+		LoginEndpoint:          loginEndpoint,
+		CredentialEndpoint:     getCredentialsEndpoint,
+		SaveCredentialEndpoint: saveCredentialsEndpoint,
+		SaveUserInfoEndpoint:   saveUserInfoEndpoint,
 	}
 
 	// Wrap selected Endpoints with middlewares. See handlers/middlewares.go
@@ -120,6 +126,34 @@ func MakeCredentialsEndpoint(s pb.UsersServer, user GetUserInfo) endpoint.Endpoi
 
 		req := request.(*pb.CredentialRequest)
 		v, err := s.Credentials(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		return v, nil
+	}
+}
+
+func MakeSaveCredentialsEndpoint(s *usersService) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		span, ctx := apm.StartSpan(ctx, "SaveCredentialsEndpoint", "endpoint")
+		defer span.End()
+
+		req := request.(*pb.CredentialRequest)
+		v, err := s.SaveYahooCredential(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		return v, nil
+	}
+}
+
+func MakeSaveInformationsEndpoint(s *usersService) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		span, ctx := apm.StartSpan(ctx, "SaveInformationEndpoint", "endpoint")
+		defer span.End()
+
+		req := request.(*UserCredentialRequest)
+		v, err := s.SaveFromUserID(ctx, req)
 		if err != nil {
 			return nil, err
 		}

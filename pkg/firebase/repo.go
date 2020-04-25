@@ -13,18 +13,20 @@ import (
 )
 
 type Repo struct {
-	logger      log.Logger
+	logger    log.Logger
 	firestore *firestore.Client
 }
 
 func NewFirebaseRepository(logger log.Logger, firestore *firestore.Client) Repo {
 	return Repo{
-		logger:      logger,
+		logger:    logger,
 		firestore: firestore,
 	}
 }
 
 const AccessKey = "access_token"
+const RefreshToken = "refresh_token"
+const Email = "email"
 
 func (r *Repo) GetCredentialInformation(ctx context.Context, uid string) (users.User, error) {
 	span, ctx := apm.StartSpan(ctx, "GetCredentialInformation", "db.firebase.init")
@@ -53,13 +55,13 @@ func (r *Repo) GetCredentialInformation(ctx context.Context, uid string) (users.
 	data := snapShot.Data()
 	keyInterface, ok := data[AccessKey]
 	if !ok {
-		level.Error(r.logger).Log("message", "data did not have access key", )
+		level.Error(r.logger).Log("message", "data did not have access key")
 		return users.User{}, errors.New("goth did not have access key")
 	}
 
 	accessKey, ok = keyInterface.(string)
 	if !ok {
-		_ = level.Error(r.logger).Log("message", "access key is not a string ", )
+		_ = level.Error(r.logger).Log("message", "access key is not a string ")
 		return users.User{}, errors.New("access key was not a string")
 	}
 
@@ -71,4 +73,48 @@ func (r *Repo) getDocumentReference(ctx context.Context, docuRef *firestore.Docu
 	defer span.End()
 
 	return docuRef.Get(ctx)
+}
+
+func (r *Repo) SaveYahooCredential(ctx context.Context, uid, accessToken string) (users.User, error) {
+	span, ctx := apm.StartSpan(ctx, "SaveYahooCredential", "db.firebase.init")
+	defer span.End()
+
+	data := make(map[string]interface{}, 1)
+	docuRef := r.firestore.Collection("users").Doc(uid)
+	if docuRef == nil {
+		level.Debug(r.logger).Log("message", "could not get document", "error", errors.New("yeah no docuref"))
+
+	}
+
+	data[AccessKey] = accessToken
+	_, err := docuRef.Set(ctx, data)
+	if err != nil {
+		_ = level.Error(r.logger).Log("message", "could not save docuref ", "error", err)
+		return users.User{}, errors.New("access could not be set")
+	}
+
+	return users.User{AccessToken: accessToken}, nil
+}
+
+func (r *Repo) SaveYahooInformation(ctx context.Context, uid, accessToken, refreshToken, email string) (users.User, error) {
+	span, ctx := apm.StartSpan(ctx, "SaveYahooCredential", "db.firebase.init")
+	defer span.End()
+
+	data := make(map[string]interface{}, 1)
+	docuRef := r.firestore.Collection("users").Doc(uid)
+	if docuRef == nil {
+		level.Debug(r.logger).Log("message", "could not get document", "error", errors.New("yeah no docuref"))
+
+	}
+
+	data[AccessKey] = accessToken
+	data[RefreshToken] = refreshToken
+	data[Email] = email
+	_, err := docuRef.Set(ctx, data)
+	if err != nil {
+		_ = level.Error(r.logger).Log("message", "could not save docuref ", "error", err)
+		return users.User{}, errors.New("access could not be set")
+	}
+
+	return users.User{AccessToken: accessToken}, nil
 }
