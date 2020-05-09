@@ -14,6 +14,21 @@ metadata:
       prefix: "/grpc/users/"
       name: {{ include "fdr-users.fullname" . }}-grpc-mapping
       service: {{ include "fdr-users.fullname" . }}:{{ .Values.service.grpc }}
+      ---
+      apiVersion: ambassador/v1
+      kind: Mapping
+      host: {{ .Values.ambassador.host }}
+      grpc: true
+      prefix: "/users/"
+      name: {{ include "fdr-users.fullname" . }}-http-mapping
+      service: {{ include "fdr-users.fullname" . }}:{{ .Values.service.port }}
+       cors:
+         origins: *
+         methods: POST, GET, OPTIONS
+         headers: Content-Type
+         credentials: true
+         exposed_headers: X-Custom-Header
+         max_age: "86400"
 spec:
   type: {{ .Values.service.type }}
   ports:

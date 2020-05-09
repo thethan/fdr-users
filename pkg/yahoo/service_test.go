@@ -2,6 +2,7 @@ package yahoo
 
 import (
 	"context"
+	"fmt"
 	"github.com/go-kit/kit/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -15,7 +16,7 @@ type mockGetUserInformation struct {
 
 func getUser() users.User {
 	return users.User{
-		AccessToken: "KEaG9iCY4x_cvW_2ExyUYvwFFesYkOkSZWnvnaUt7GYBKJIjxTnklB2sGwzAC6.GznYOEXHwLsH8ArFoVTFCEeqF7tgitaiHGgHTExMU8AOgwnSegLcxX9BQGcmglEyQoOC7yXaxqIxy6tVPFcbZE.SPaS5LTtKpnv8asWuBxMDBrja8bmQCMzVmoTRMWmHJxmCiaIW8HWnVphqRp4C5WSZWre9HSoSx_4JB0s1DNMLvPC_9b2g.dm7ORi5r9GBZxcgHqP50H.kC4d8PV5x.9pzzrFZrgkMJEukE2xXJUd8ZIwph4rDe3LZcKh8O6LbEJTkprhEc4UI8wdO7TvFHYsSTw8mueXlFSI3MbePzY6HRKKMVYfQmsqBXn4q2IPK8dDZRaACCr0mlBp4tfo87Jhd8fE9PGRf57Zh9xrn3pWclG2ABBEXNMLt3FAlU.2cWT8UOGepNV.uzuoiCukZZhqOg0qWfpGl67vio.nCB6qsn42C7q4alk9MovUcj1wu1MOv5.3d.D..PvYnaaSzZElaPLfMcCPZCJIXuZXT4AnyUOr1NWuUoDOUuTt19V.qvR6xPMsGJdvsooM7.j0RYvn61JWo01KGH8m57s0mc1t3IMJ9ChGJrSKkelxDb8J9WzL6oMeNNSlpdBzxLBuA.RpJlOZXECD2hbr1wrQGHnZI8IsiG9oESl1pYEe7yI9A1VXouM17LF8pmHx0ZkLwajRx6SXnQWKpMAcEBW_CzMoFJZSy2TbCjwazsYAIwt4Tyleuv9sfCzzlP_GfSs8PjxmAqT36B_AuD2nf1.1HWYqUHmGTcFiZZiwWmIuZ7jUlVxirRHcjxj4fPL2hYDwYtCC8dy6Yr8YSWLtbbt9.BR8.NTWjP0XHxmgV5T2gq0Ohj8hm6ct0_DJXlS4tKZluBGy2q_6Vp2q1wFtnku2cW0bUXhlIjm5.Nej6PZdnpqR5Yv8.ifUJm9FgBQAAbHwuNzA8JGLhmA4zkA68v13Hy7x8xj7cREuQfJuCFEWeaJ3VDBuqftFHe7.s1bSyFUmJM1kX0pq6o8hbEPzSk2RFtUR.1zBblsC5EuCa6JvKaiPtrQKuxNqUmKiXoKvQlBvQwboFBc7u0P6r9B8umog8.OdW1FQHfa6N_0cTbmuwhsu4dCiNSnTkOVjciIYSa7jLsBo_6oh2TbzQ8c30p.aIS.Q--",
+		AccessToken: "yobokzCY4x_Btuckuyb67JaTPDi7M.zEvtt_ZmIoKSUPvcc.ayGoBdlLdczPjo3AlD1RbWBf8yfUQ5lXlxXXjOSgRBn9CKIm0O2hKqggqIW9.B4LpczY774ui05fCcQ77SQ57fR2IgRp1XJFqd1CHqagJ1jDUj_yJm.TKiXzdLUYDtaedAR86IOXRbdsKZwTWp08GXo8ijSJgavoVVBURr5lVCy42QoVuc8Kk9rzsRbSJYZ93WtthvA.Bmj1lj.TQ_AYbhlGv.qzlRrJ0ZhlK8Xhd_NFmdDvW5mPE2qTTP0ZytIX0VGLKrnK5AYnhx6el1g3xVtOaH92uKv2CTE1AlDyBz4zln4NFaLczGjJD2.yge_SPv6l5ULukwYZ1W8RK9ijpZv0VE2PUeKXPYQ2fNZRRTd5_exOGlPvy9E.ggg5sC2scCwTKDtZJrUPcPMcoBNex39LrQmJ9M.mdx9b.x8stZtKfa5h8HsNKvkAhNqgOgUSXPGeCQVkWLRt9.K3rmwPxy90xTjNVLaSmwgJWX30w1kgw4X0TA1Ba3y3NG8knxCsF4hGGVTfR.NKXLxb9KrwP7HIrklwqGWSPPhmRPd5TM_flwgioK.BwPn2AHuXwqJrAtqzAQiz3oBdpJSCIlSbFAmvVyH05YAj8S7FpbvoTynRM7AHyuAUGvptkaxT3hc3aKv417C3gSD9EmPa9FfTYt6RMucw_03tazB0G3G_A_G7hjf0zHrPZEPTRq6CQXTyfy1csX0d8oU_WJN.NlgLrEk4KYe59U8TEWhIs4PUpgCg2EPZ2vhp4ycy63ZlWKBscSizCcvZGYfJcpbwz_T4iKZjn3909e4sooxGCqg7RhvFqFMcrKIygdvcTI_rXfw8Tye7bRLNTa.1xJhPdJlxTZKuhOmY2CiXS_LlAtt_HILnTyahrpEJw574YUXM0Lw6dyFEwLd44WnWm9e21TBjKjR6Ddo8.AYWxHXcvSXFaZJyFsMJjFHvT0kSbs4S71isRuP4jsJZEvfHQ.Xmvl1q1HkWd_G13OhnrYKuZ.kR4zeMfpry3H7qFFK7vhTgtp8Cb07UkgrPAL5CiGqQxCYzj9Ts_eTk0egQW9IxOr0MfBy4iLkDFb_bdpF.M.D86y4zFPav.pc14jiS_OoiG.uLq8X443ojPAJSNddCQ1L_FYY7ZHnMjWhgV_ovIA--",
 	}
 }
 
@@ -40,7 +41,7 @@ func TestService_GetUserResourcesGames(t *testing.T) {
 	assert.True(t, len(games.Games) > 0, "Length of games is not greater than 0")
 }
 
-func TestService_GetUserResourcesGameLeagues(t *testing.T) {
+func TestService_GetLeaguesUserInfo(t *testing.T) {
 	mockUserInfo :=  mockGetUserInformation{}
 	logger := log.NewNopLogger()
 	ctx := context.Background()
@@ -49,13 +50,14 @@ func TestService_GetUserResourcesGameLeagues(t *testing.T) {
 
 
 	svc := NewService(logger, mockUserInfo)
-	leagues, err := svc.GetUserResourcesGameLeagues(ctx, "390")
+	res, err := svc.GetLeagueResourcesStandings(ctx, "273.l.652120")
 	assert.Nil(t, err)
 	mockUserInfo.AssertExpectations(t)
-	assert.True(t, len(leagues.GameLeague.Leagues) > 0, "Length of games is not greater than 0")
+	fmt.Printf("%v", res)
+	//assert.True(t, len(res.League) > 0, "Length of games is not greater than 0")
 }
 
-func TestService_GetUserResourcesGameLeaguesSettings(t *testing.T) {
+func TestService_GetLeaguesSettings(t *testing.T) {
 	mockUserInfo :=  mockGetUserInformation{}
 	logger := log.NewNopLogger()
 	ctx := context.Background()
@@ -64,18 +66,100 @@ func TestService_GetUserResourcesGameLeaguesSettings(t *testing.T) {
 
 
 	svc := NewService(logger, mockUserInfo)
-	leagues, err := svc.GetUserResourcesGameLeagues(ctx, "390")
+	res, err := svc.GetLeagueResourcesSettings(ctx, "273.l.652120")
 	assert.Nil(t, err)
 	mockUserInfo.AssertExpectations(t)
+	fmt.Printf("%v", res)
+	//assert.True(t, len(res.League) > 0, "Length of games is not greater than 0")
+}
+//
+//func TestService_GetUserResourcesGameLeagues(t *testing.T) {
+//	mockUserInfo :=  mockGetUserInformation{}
+//	logger := log.NewNopLogger()
+//	ctx := context.Background()
+//
+//	mockUserInfo.On("GetCredentialInformation", ctx, mock.AnythingOfType("string")).Return(getUser(), nil)
+//
+//
+//	svc := NewService(logger, mockUserInfo)
+//	leagues, err := svc.GetUserResourcesGameLeagues(ctx, "390")
+//	assert.Nil(t, err)
+//	mockUserInfo.AssertExpectations(t)
+//	assert.True(t, len(leagues.GameLeague.Leagues) > 0, "Length of games is not greater than 0")
+//}
+//
+//func TestService_GetUserResourcesGameLeaguesSettings(t *testing.T) {
+//	mockUserInfo :=  mockGetUserInformation{}
+//	logger := log.NewNopLogger()
+//	ctx := context.Background()
+//
+//	mockUserInfo.On("GetCredentialInformation", ctx, mock.AnythingOfType("string")).Return(getUser(), nil)
+//
+//
+//	svc := NewService(logger, mockUserInfo)
+//	leagues, err := svc.GetUserResourcesGameLeagues(ctx, "390")
+//	assert.Nil(t, err)
+//	mockUserInfo.AssertExpectations(t)
+//
+//	for _, league := range leagues.GameLeague.Leagues {
+//		_, err := svc.GetLeagueResourcesSettings(ctx, league.LeagueKey)
+//		assert.Nil(t, err)
+//		// getLeague Resource
+//		_, err = svc.GetLeagueResourcesTeams(ctx, league.LeagueKey)
+//		assert.Nil(t, err)
+//
+//
+//	}
+//
+//}
+//
+//
+//func TestService_GetUserResourcesGameTeams(t *testing.T) {
+//	mockUserInfo :=  mockGetUserInformation{}
+//	logger := log.NewNopLogger()
+//	ctx := context.Background()
+//
+//	mockUserInfo.On("GetCredentialInformation", ctx, mock.AnythingOfType("string")).Return(getUser(), nil)
+//
+//
+//	svc := NewService(logger, mockUserInfo)
+//	leagues, err := svc.GetUserResourcesGameTeams(ctx, "390")
+//	assert.Nil(t, err)
+//	mockUserInfo.AssertExpectations(t)
+//
+//	for _, league := range leagues.GameLeague.Leagues {
+//		_, err := svc.GetLeagueResourcesSettings(ctx, league.LeagueKey)
+//		assert.Nil(t, err)
+//		// getLeague Resource
+//		_, err = svc.GetLeagueResourcesTeams(ctx, league.LeagueKey)
+//		assert.Nil(t, err)
+//
+//
+//	}
+//
+//}
 
-	for _, league := range leagues.GameLeague.Leagues {
-		_, err := svc.GetLeagueResourcesSettings(ctx, league.LeagueKey)
-		assert.Nil(t, err)
-	}
-
+func TestService_ImportForAUser(t *testing.T) {
+	// Get User Games
 }
 
 
+func TestService_GetGameResourcesPositionTypes(t *testing.T) {
+	//mockUserInfo :=  mockGetUserInformation{}
+	//logger := log.NewNopLogger()
+	//ctx := context.Background()
+	//
+	//mockUserInfo.On("GetCredentialInformation", ctx, mock.AnythingOfType("string")).Return(getUser(), nil)
+
+
+	//svc := NewService(logger, mockUserInfo)
+	//leagues, err := svc.GetGameResourcesPositionTypes(ctx, "390")
+	//assert.Nil(t, err)
+	//mockUserInfo.AssertExpectations(t)
+
+
+
+}
 //func TestService_GetUserResourcesGameLeaguesSettings(t *testing.T) {
 //	mockUserInfo := mockGetUserInformation{}
 //	logger := log.NewNopLogger()

@@ -9,8 +9,19 @@ import (
 	"fmt"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	muxhandlers "github.com/gorilla/handlers"
+	"github.com/gorilla/mux"
 	"github.com/grpc-ecosystem/go-grpc-middleware"
 	grpc_auth "github.com/grpc-ecosystem/go-grpc-middleware/auth"
+	"github.com/oklog/run"
+	"github.com/thethan/fdr-users/pkg/coordinator/transports"
+	"github.com/thethan/fdr-users/pkg/goff"
+	"github.com/thethan/fdr-users/pkg/yahoo"
+	"go.elastic.co/apm/module/apmgorilla"
+	"net/http"
+	"os/signal"
+	"syscall"
+
 	firebase2 "github.com/thethan/fdr-users/pkg/firebase"
 	"go.elastic.co/apm/module/apmgrpc"
 	"google.golang.org/api/option"
@@ -19,6 +30,7 @@ import (
 	gokitLogrus "github.com/go-kit/kit/log/logrus"
 	"github.com/sirupsen/logrus"
 	"github.com/thethan/fdr-users/pkg/auth"
+	"github.com/thethan/fdr-users/pkg/coordinator"
 	"go.elastic.co/apm"
 	"go.elastic.co/apm/module/apmlogrus"
 	"io/ioutil"
@@ -62,6 +74,7 @@ func init() {
 		DefaultConfig.DebugAddr = addr
 	}
 	if port := os.Getenv("PORT"); port != "" {
+
 		DefaultConfig.HTTPAddr = fmt.Sprintf(":%s", port)
 	}
 	if addr := os.Getenv("HTTP_ADDR"); addr != "" {
@@ -82,18 +95,7 @@ func init() {
 	logrusLogger.AddHook(&apmlogrus.Hook{})
 }
 
-///{
-//  "type": "service_account",
-//  "project_id": "fantasy-draft-room-248123",
-//  "private_key_id": "ffa92c991c4bd5d59284296012c1ff6285dbaa1f",
-//  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQDZwpnWlGiDPDtQ\ngrGcAV3d/UImIfzMgI0TouG2CIi5qd9BRtjKt/umKy/9jpcTJLdUrCWdOFInOWui\ndcGxGxzk6Zs6J1V/HT2xbI6JL5B0/Yxt8EDbHwC5caWjsjj/e8VW+JLv5dSB95ql\nmtcEJzl5j98yt9CEXI37LCnMUVYo8e5QwKTpUHgLkTJJ0NEfTzIcAcIJ6NXQ1g0F\n/KOp+iFPusbmUK3aCDqQyGRSJLgwbaDWeYEfSoMyRoykyYn24XQOUR7X04UKVJtw\nmyoXZQ3Ne+IuBnkqaM8WymjwMusL5mB4Z+8y/e9i0Cf3USDi1kclcy7ghLBcIOJV\nfcikrW2pAgMBAAECggEAIfAoVb8PgtSSUfvsfmngHUbpVlQZuC2YzySllN9Dn9wP\nxXarNvzxpXY5poTgmsUwJWwm+Jfchex3D/zWUSnumOanoKqcspD2Gn7WwB6/ntwd\nVM0K7puoWz6RGDAgngDGQsW+8NCbDB5w5bp6JFWQqZd4q8jmIJrkLe82HHfYu8yf\nL07r6t6Z3NyfeeVB1qbMjpuerJc2+1V0NUCxRBZXrWbjKaKAy7AyUcWeQSXGqxLK\n80hJGXh+yavPltXGGwrn1kF/W99L5oFSnltUZx0500jPWN2OJAe69Cd7YLojamys\npwORA13OCe3VxmRFJJH0ZbRjBOGArcFtm/pZ/DsAGQKBgQD3wqnas9DNCOZf4nKN\nhSHgMvWJ4jmkECdbgCDeIJ608aX6MTPliYtYBWH1wwRlAaNEN6LSMSgcKV77riDL\nztMJWp7pokznkeObu9MhyPnOJmcuOhJVQEr64w/W27v7SrnUtH6lDm/m1rSn5/38\niKINeJVS6FBHqu5gSybE/934swKBgQDhAIbk1PDJc33ZaJpfk1f/hBZDRyrEz/XV\n5ceOrYI6S/idLHlOgBV44ISOxZBQWrcplsmKV+nAjtRi1InXP/ER/2etoW718zj6\ngD/RTjpNBhs0IvNQIx1NkCcOypbQXF2kyV6jC5Iooqr4z4/Ow5gazi5+86FL4zi9\nWxiOe1SWMwKBgQDaZ7Oro0+xLuNGKyyoLHAMX1+ryMzfH45STsSqiz7caxjRUIZb\nFcDMOxJ7vwoksCjofdL+T274RFACtSEcCJpoaIYllnkMucJXCl+4LJ5pZ9kVGwQG\nOsLeH0NbOCCiCOF/7AyoG+3xI9vlF9EByMBx95ZKm5gJVVkFcbofdx6JmQKBgQDN\nGYndNi53tAtYDv4JeWqRxHn2wfy+g0L4xAhwisFXGsF5pHy/jgoEscSj0HuIg+jK\nxGTa8uBlYs0/ebZcvDCn00VTBQD8ucWKszV5OfHzHEnX8LQSrK+dcHXqCcoIDOpf\nuB/ISFfnKsDnJW1VcP5KEQBZQQQbBPlHwq5T0yB7+QKBgQCXjvGEED4LysW3OaJu\nvM/0LY3SRgZG1OsmCWTIF4RfYQA3M+A9YF4NF2Rm/UVeTJoHwDA8owjVN5D1th/2\nD2ExpF90aCuapFLMQ5th9vLr7LqH1SFt8sq6GBdqxBnxbqFRQjCSLHhr/wnBrzu0\nWUx+x0Vm+rIwUzfXYRvPAfmG2A==\n-----END PRIVATE KEY-----\n",
-//  "client_email": "firebase-adminsdk-dw8dr@fantasy-draft-room-248123.iam.gserviceaccount.com",
-//  "client_id": "112531787805144036682",
-//  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-//  "token_uri": "https://oauth2.googleapis.com/token",
-//  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-//  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-dw8dr%40fantasy-draft-room-248123.iam.gserviceaccount.com"
-//}
+
 type serviceAccount struct {
 	ProjectID               string `json:"project_id"`
 	PrivateKeyID            string `json:"private_key_id"`
@@ -146,38 +148,91 @@ func main() {
 	authRepo := firebase2.NewFirestoreAuthRepo(logger, firebaseauthclient)
 
 	authSvc := auth.NewAuthService(logger, &authRepo)
-	endpoints := users.NewEndpoints(logger, &repo)
+
+	yahooProvider := yahoo.NewService(logger, &repo,)
+	goffYahooClient := goff.NewClient(yahooProvider)
+	coordinatorService := coordinator.NewService(logger, logrusLogger, goffYahooClient, &repo)
+	//mongoClient, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"))
+	//if err != nil {
+	//	logger.Log("message", "error in initializing mongo client", "error", err)
+	//	os.Exit(1)
+	//}
+	coordinatorEndpoints := coordinator.NewEndpoints(logrusLogger, coordinatorService, authSvc.NewAuthMiddleware(&repo))
+	_ = transports.NewServer(logger, logrusLogger, coordinatorEndpoints)
+	coordinatorHTTPServer := transports.NewHTTPServer(logrusLogger, coordinatorEndpoints, authSvc.ServerBefore)
+	endpoints := users.NewEndpoints(logger, &repo, &repo, authSvc.NewAuthMiddleware(&repo), authSvc.ServerBefore)
+
+	router := mux.NewRouter()
+	apmgorilla.Instrument(router)
+	router.Methods(http.MethodGet).PathPrefix("/import").HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.WriteHeader(http.StatusAlreadyReported)
+	})
+
+	router.Methods(http.MethodPost).PathPrefix("/import").Handler(coordinatorHTTPServer)
+	users.MakeHTTPHandler(endpoints, router, authSvc.ServerBefore)
 
 	// Mechanical domain.
 	errc := make(chan error)
+
+	apm.DefaultTracer.SetLogger(logrusLogger)
+	logrusLogger.AddHook(&apmlogrus.Hook{})
 
 	// Interrupt handler.
 	go handlers.InterruptHandler(errc)
 
 	// gRPC transport.
-	go func() {
-		logger.Log("transport", "gRPC", "addr", DefaultConfig.GRPCAddr)
-		ln, err := net.Listen("tcp", DefaultConfig.GRPCAddr)
-		if err != nil {
-			errc <- err
+	var g run.Group
+	{
+		g.Add(func() error {
+			ln, _ := net.Listen("tcp", DefaultConfig.HTTPAddr)
+
+			return http.Serve(ln, muxhandlers.CORS(muxhandlers.AllowedHeaders([]string{"X-Requested-With", "Content-Type", "Authorization"}), muxhandlers.AllowedMethods([]string{"GET", "POST", "PUT", "HEAD", "OPTIONS"}), muxhandlers.AllowedOrigins([]string{"*"}))(router))
+		}, func(err error) {
 			return
-		}
+		})
+	}
+	{
+		g.Add(func() error {
 
-		srv := users.MakeGRPCServer(endpoints)
+			logger.Log("transport", "gRPC", "addr", DefaultConfig.GRPCAddr)
+			ln, err := net.Listen("tcp", DefaultConfig.GRPCAddr)
+			if err != nil {
+				errc <- err
+			}
 
-		authInterceptor := grpc_auth.UnaryServerInterceptor(authSvc.ServerAuthentication(ctx, logger))
-		apmInterceptor := apmgrpc.NewUnaryServerInterceptor()
-		middlewareInterceptor := grpc_middleware.ChainUnaryServer(apmInterceptor, authInterceptor, )
+			srv := users.MakeGRPCServer(endpoints)
 
-		//grpc.UnaryInterceptor(grpc_auth.UnaryServerInterceptor(authSvc.ServerAuthentication(ctx, logger))
-		s := grpc.NewServer(grpc.UnaryInterceptor(middlewareInterceptor))
-		pb.RegisterUsersServer(s, srv)
+			authInterceptor := grpc_auth.UnaryServerInterceptor(authSvc.ServerAuthentication(ctx, logger))
+			apmInterceptor := apmgrpc.NewUnaryServerInterceptor()
+			middlewareInterceptor := grpc_middleware.ChainUnaryServer(apmInterceptor, authInterceptor)
 
-		errc <- s.Serve(ln)
-	}()
+			//grpc.UnaryInterceptor(grpc_auth.UnaryServerInterceptor(authSvc.ServerAuthentication(ctx, logger))
+			s := grpc.NewServer(grpc.UnaryInterceptor(middlewareInterceptor))
+			pb.RegisterUsersServer(s, srv)
+
+			return s.Serve(ln)
+		}, func(err error) {
+		})
+
+	}
+	{
+		g.Add(func() error {
+			c := make(chan os.Signal, 1)
+			signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
+			select {
+			case sig := <-c:
+				return fmt.Errorf("received signal %s", sig)
+			case err := <-errc:
+				return err
+			}
+		}, func(err error) {
+			level.Error(logger).Log("interrupt triggered", err.Error())
+			close(errc)
+		})
+	}
 
 	// Run!
-	logger.Log("exit", <-errc)
+	_ = level.Error(logger).Log("exit", g.Run())
 }
 
 func initializeAppDefault(ctx context.Context, config Config, logger log.Logger) (*firestore.Client, *firebaseAuth.Client) {
