@@ -6,7 +6,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/golang/protobuf/ptypes"
 	"github.com/stretchr/testify/assert"
-	"github.com/thethan/fdr-draft/pkg/mongo"
+	"github.com/thethan/fdr-users/pkg/mongo"
 	pb "github.com/thethan/fdr_proto"
 	"go.mongodb.org/mongo-driver/bson"
 	"os"
@@ -33,7 +33,6 @@ func TestCreatingNewMongodb(t *testing.T) {
 		ctx := context.Background()
 		timestamp, _ := ptypes.TimestampProto(time.Now())
 		season := pb.Season{
-			Year:                 "2020",
 			League:               1,
 			DraftType:            0,
 			DraftTime:            timestamp,
@@ -102,7 +101,6 @@ func TestListUsersDraft(t *testing.T) {
 		repo := NewMongoRepository(logger, client, "drafts", "draft", "user", "rosters")
 		ctx := context.Background()
 		season := pb.Season{
-			Year:                 "2020",
 			League:               1,
 			DraftType:            0,
 			DraftTime:            nil,

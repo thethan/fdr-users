@@ -118,7 +118,7 @@ type GameResourceLeagues struct {
 	Type    string   `json:"type"`
 	URL     string   `json:"url"`
 	Season  string   `json:"season"`
-	Leagues []League `json:"leagues"`
+	Leagues []League `json:"league"`
 }
 type League struct {
 	LeagueKey             string `xml:"league_key"`
@@ -176,7 +176,7 @@ type GameResourceLeaguesResponse struct {
 			Text   string        `xml:",chardata"`
 			Count  string        `xml:"count,attr"`
 			League []YahooLeague `xml:"league"`
-		} `xml:"leagues"`
+		} `xml:"league"`
 	} `xml:"game"`
 }
 
@@ -215,7 +215,7 @@ type YahooLeague struct {
 // GetGameResourcesLeagues
 func (s *Service) GetGameResourcesLeagues(gameKey string, leagueKeys []string) (*GameResourceLeagues, error) {
 
-	url := fmt.Sprintf("https://fantasysports.yahooapis.com/fantasy/v2/game/%s/leagues;league_keys=%s", gameKey, strings.Join(leagueKeys, ","))
+	url := fmt.Sprintf("https://fantasysports.yahooapis.com/fantasy/v2/game/%s/league;league_keys=%s", gameKey, strings.Join(leagueKeys, ","))
 	res, err := s.Get(url)
 
 	if err != nil {
@@ -746,12 +746,12 @@ type GameLeagues struct {
 	Type    string   `json:"type"`
 	URL     string   `json:"url"`
 	Season  string   `json:"season"`
-	Leagues []League `json:"leagues"`
+	Leagues []League `json:"league"`
 }
 
 type UserResourcesGameLeagues struct {
 	GUID       string      `json:"guid"`
-	GameLeague GameLeagues `json:"leagues"`
+	GameLeague GameLeagues `json:"league"`
 }
 
 type UserResourcesGameLeaguesResponse struct {

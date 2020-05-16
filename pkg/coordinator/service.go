@@ -8,7 +8,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/sirupsen/logrus"
 	"github.com/thethan/fdr-users/pkg/auth"
-	"github.com/thethan/fdr-users/pkg/goff"
+
 	"github.com/thethan/fdr-users/pkg/yahoo"
 	"go.elastic.co/apm"
 	"go.elastic.co/apm/module/apmlogrus"
@@ -19,7 +19,7 @@ import (
 type Service struct {
 	logger     log.Logger
 	logrus     logrus.FieldLogger
-	goffClient *goff.Client
+
 	userRepo   yahoo.UserInformation
 }
 
@@ -29,8 +29,8 @@ type GameRepo interface {
 	SendGame(context.Context, Game)
 }
 
-func NewService(logger log.Logger, fieldLogger logrus.FieldLogger, goffService *goff.Client, userRepo yahoo.UserInformation) Service {
-	return Service{logger: logger, logrus: fieldLogger, goffClient: goffService, userRepo: userRepo}
+func NewService(logger log.Logger, fieldLogger logrus.FieldLogger, userRepo yahoo.UserInformation) Service {
+	return Service{logger: logger, logrus: fieldLogger, userRepo: userRepo}
 }
 
 type User struct {
@@ -78,10 +78,10 @@ func (s Service) importUserLeagues(ctx context.Context, req interface{}) (res in
 	//	//	assert.Nil(t, err)
 	//	//	t.Log(setting)
 	//	//}
-	//	// get all leagues with game keys
-	//	leagues , _ := client.GetUserLeagues(game.GameID)
+	//	// get all league with game keys
+	//	league , _ := client.GetUserLeagues(game.GameID)
 	//
-	//	for _, league := range leagues {
+	//	for _, league := range league {
 	//		settings , _ := client.GetLeagueSettings(league.LeagueKey)
 	//
 	//		// this is where we need to transform all the information to a grpc call
@@ -97,9 +97,9 @@ func (s Service) importUserLeagues(ctx context.Context, req interface{}) (res in
 func (s *Service) getUserLeagues(ctx context.Context, user User) {
 	span, ctx := apm.StartSpan(ctx, "service.getUserLeagues", "custom")
 	defer span.End()
-	// loop through leagues
-	for _, val := range goff.YearKeys {
-		s.goffClient.GetUserLeagues(val)
-	}
+	// loop through league
+	///for _, val := range goff.YearKeys {
+	////	s.goffClient.GetUserLeagues(val)
+	////}
 }
 

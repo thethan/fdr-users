@@ -2,27 +2,26 @@ package repositories
 
 import (
 	"context"
-	"fmt"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/golang/protobuf/ptypes/timestamp"
+	"github.com/thethan/fdr-users/pkg/draft/entities"
 	pb "github.com/thethan/fdr_proto"
 	"go.elastic.co/apm"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
-	"strconv"
-	"time"
 )
 
 type MongoRepository struct {
-	logger           log.Logger
-	client           *mongo.Client
-	database         string
-	draftCollection  string
-	userCollection   string
-	rosterCollection string
+	logger                 log.Logger
+	client                 *mongo.Client
+	database               string
+	draftCollection        string
+	draftGroupCollection   string
+	draftResultsCollection string
+	userCollection         string
+	rosterCollection       string
 }
 
 type Draft struct {
@@ -63,163 +62,191 @@ type RosterRule struct {
 }
 
 func NewMongoRepository(logger log.Logger, client *mongo.Client, database string, draftCollection, userCollection, rosterCollection string) MongoRepository {
-	return MongoRepository{logger: logger, client: client, database: database, draftCollection: draftCollection, userCollection: userCollection, rosterCollection: rosterCollection}
+	return MongoRepository{logger: logger, client: client, database: database,
+		draftCollection:        draftCollection,
+		draftResultsCollection: "draft-results",
+		userCollection:         userCollection,
+		rosterCollection:       rosterCollection}
 }
 
+func (m *MongoRepository) SaveLeague(ctx context.Context, leagueGroupd *entities.LeagueGroup) (*entities.LeagueGroup, error) {
+	span, ctx := apm.StartSpan(ctx, "CreateLeague", "repository.Mongo")
+	defer span.End()
 
+	// save only email
+	collection := m.client.Database("fdr").Collection("leagues")
+	// find previous leagueGroupd if any
+
+	leagueGroupFilter := bson.M{"league_id": leagueGroupd.FirstLeagueID}
+
+	res := collection.FindOne(ctx, leagueGroupFilter)
+	parentLeague := entities.League{}
+
+	//
+	res.Decode(&parentLeague)
+	//league.LeagueGroup = primitive.NewObjectID()
+	leagGroupID := primitive.NewObjectID()
+	if parentLeague.LeagueID != 0 {
+		leagGroupID = parentLeague.LeagueGroup
+	}
+
+	for idx := range leagueGroupd.Leagues {
+		leagueGroupd.Leagues[idx].LeagueGroup = leagGroupID
+
+	}
+
+	leagueInterface := make([]interface{}, len(leagueGroupd.Leagues))
+	for idx := range leagueInterface {
+		// insert one
+		leagueInterface[idx] = leagueGroupd.Leagues[idx]
+	}
+
+	_, err := collection.InsertMany(ctx, leagueInterface)
+	if err != nil {
+		level.Error(m.logger).Log("message", "could not save draft", "error", err)
+		return leagueGroupd, err
+	}
+
+	return leagueGroupd, nil
+	//fmt.Printf("%v", insertedResult.InsertedID)
+	//draftID, _ := insertedResult.InsertedID.(primitive.ObjectID)
+	//
+	//userCollection := m.client.Database(m.database).Collection(m.userCollection)
+	//
+	//for _, user := range league.Teams {
+	//	filter := bson.M{"_id": user.Email}
+	//	var mongoUser User
+	//	res := userCollection.FindOne(ctx, filter)
+	//
+	//	res.Decode(&mongoUser)
+	//	if mongoUser.Email != "" {
+	//		// transformPBUserToUser
+	//		level.Debug(m.logger).Log("msg", "hitting ")
+	//		update := bson.M{"$push": bson.M{"drafts": draftID}}
+	//		_, err := userCollection.UpdateOne(ctx, filter, update, options.Update().SetUpsert(true))
+	//		if err != nil {
+	//			return league, err
+	//		}
+	//	} else {
+	//		mongoUser, _ := transformPBUserToUser(user)
+	//		mongoUser.Commissioned = []primitive.ObjectID{}
+	//		mongoUser.Drafts = []primitive.ObjectID{draftID}
+	//
+	//		insertOne, err := userCollection.InsertOne(ctx, mongoUser)
+	//		if err != nil {
+	//			return season, err
+	//		}
+	//		userID, _ := insertOne.InsertedID.(primitive.ObjectID)
+	//		level.Debug(m.logger).Log("message", "new user inserted", "user_id", userID)
+	//	}
+	//
+	//}
+	//
+	//for _, user := range season.Commissioners {
+	//	filter := bson.M{"_id": user.Email}
+	//	var mongoUser User
+	//	res := userCollection.FindOne(ctx, filter)
+	//
+	//	res.Decode(&mongoUser)
+	//	if mongoUser.Email != "" {
+	//		// transformPBUserToUser
+	//		update := bson.M{"$push": bson.M{"commissioned": draftID}}
+	//		_, err := userCollection.UpdateOne(ctx, filter, update, options.Update().SetUpsert(true))
+	//		if err != nil {
+	//			return season, err
+	//		}
+	//	} else {
+	//		//
+	//		mongoUser, _ = transformPBUserToUser(user)
+	//		mongoUser.Commissioned = []primitive.ObjectID{draftID}
+	//		mongoUser.Drafts = []primitive.ObjectID{}
+	//		userID, _ := m.SaveUser(ctx, draftID, mongoUser)
+	//		level.Debug(m.logger).Log("message", "new user inserted", "user_id", userID)
+	//
+	//	}
+	//}
+	//
+	//rosterCollection := m.client.Database(m.database).Collection(m.rosterCollection)
+	//
+	//rosterRules := RosterRules{
+	//	ID:          primitive.NewObjectID(),
+	//	RosterRules: []RosterRule{},
+	//}
+	//
+	//rrDoc := make([]bson.D, len(season.Roster))
+	//for idx, rosterRule := range season.Roster {
+	//	// transformPBUserToUser
+	//	rrDoc[idx] = bson.D{{"position", int(rosterRule.Position)}, {"max", rosterRule.Max}, {"starting", rosterRule.Starting}}
+	//
+	//	rosterRules.RosterRules = append(rosterRules.RosterRules, RosterRule{
+	//		Position: int(rosterRule.Position),
+	//		Starting: rosterRule.Starting,
+	//		Max:      rosterRule.Max,
+	//	})
+	//
+	//}
+	//
+	//bsonRosterQuery := bson.D{
+	//	{"rosterrules", bson.D{{"$all", bson.A{rrDoc}}}},
+	//}
+	//
+	//filter := bsonRosterQuery
+	//findRoster := rosterCollection.FindOne(ctx, filter)
+	//
+	//findRoster.Decode(&rosterRules)
+	//
+	//if findRoster.Err() != nil {
+	//	insertOne, err := rosterCollection.InsertOne(ctx, rosterRules)
+	//	if err != nil {
+	//		return season, err
+	//	}
+	//	rosterID, _ := insertOne.InsertedID.(primitive.ObjectID)
+	//	collection.UpdateOne(ctx, bson.M{"_id": draftID}, bson.M{"$set": bson.M{"roster": rosterID}})
+	//}
+	//
+	//// transform to response
+	//newSeason, err := transformDraftToPBSeason(*draft)
+	//participants, err := m.getUsersByType(ctx, userCollection, draft.ID, "drafts")
+	//if err != nil {
+	//	return newSeason, err
+	//}
+	//pbParticipants := make([]*pb.User, len(participants))
+	//for idx := range participants {
+	//	pbParticipant, _ := transformUserToPBUser(*participants[idx])
+	//	pbParticipants[idx] = &pbParticipant
+	//}
+	//newSeason.Users = pbParticipants
+	//
+	//commissioners, err := m.getUsersByType(ctx, userCollection, draft.ID, "commissioned")
+	//if err != nil {
+	//	return newSeason, err
+	//}
+	//
+	//pbCommissioners := make([]*pb.User, len(commissioners))
+	//for idx := range commissioners {
+	//	pbParticipant, _ := transformUserToPBUser(*commissioners[idx])
+	//	pbCommissioners[idx] = &pbParticipant
+	//}
+	//newSeason.Commissioners = pbCommissioners
+	//
+	//// roster
+	//newSeason.Roster, _ = transformRosterToRosterPB(rosterRules)
+	//return newSeason, err
+	return nil, nil
+}
 
 func (m MongoRepository) CreateDraft(ctx context.Context, season pb.Season) (pb.Season, error) {
 	span, ctx := apm.StartSpan(ctx, "CreateDraft", "repository.Mongo")
 	defer span.End()
 
-	// save only email
-	collection := m.client.Database("fdr_drafts").Collection(m.draftCollection)
-
-	draft, err := transformPBSeasonToDraft(season)
-	if err != nil {
-		level.Error(m.logger).Log("message", "could not transform season to draft", "error", err)
-		return season, err
-	}
-
-	insertedResult, err := collection.InsertOne(ctx, draft)
-	if err != nil {
-		level.Error(m.logger).Log("message", "could not save draft", "error", err)
-		return season, err
-	}
-
-	fmt.Printf("%v", insertedResult.InsertedID)
-	draftID, _ := insertedResult.InsertedID.(primitive.ObjectID)
-
-	season.ID = draftID.String()
-
-	userCollection := m.client.Database(m.database).Collection(m.userCollection)
-
-	for _, user := range season.Users {
-		filter := bson.M{"_id": user.Email}
-		var mongoUser User
-		res := userCollection.FindOne(ctx, filter)
-
-		res.Decode(&mongoUser)
-		if mongoUser.Email != "" {
-			// transformPBUserToUser
-			level.Debug(m.logger).Log("msg", "hitting ")
-			update := bson.M{"$push": bson.M{"drafts": draftID}}
-			_, err := userCollection.UpdateOne(ctx, filter, update, options.Update().SetUpsert(true))
-			if err != nil {
-				return season, err
-			}
-		} else {
-			mongoUser, _ := transformPBUserToUser(user)
-			mongoUser.Commissioned = []primitive.ObjectID{}
-			mongoUser.Drafts = []primitive.ObjectID{draftID}
-
-			insertOne, err := userCollection.InsertOne(ctx, mongoUser)
-			if err != nil {
-				return season, err
-			}
-			userID, _ := insertOne.InsertedID.(primitive.ObjectID)
-			level.Debug(m.logger).Log("message", "new user inserted", "user_id", userID)
-		}
-
-	}
-
-	for _, user := range season.Commissioners {
-		filter := bson.M{"_id": user.Email}
-		var mongoUser User
-		res := userCollection.FindOne(ctx, filter)
-
-		res.Decode(&mongoUser)
-		if mongoUser.Email != "" {
-			// transformPBUserToUser
-			update := bson.M{"$push": bson.M{"commissioned": draftID}}
-			_, err := userCollection.UpdateOne(ctx, filter, update, options.Update().SetUpsert(true))
-			if err != nil {
-				return season, err
-			}
-		} else {
-			//
-			mongoUser, _ = transformPBUserToUser(user)
-			mongoUser.Commissioned = []primitive.ObjectID{draftID}
-			mongoUser.Drafts = []primitive.ObjectID{}
-			userID, _ := m.SaveUser(ctx, draftID, mongoUser)
-			level.Debug(m.logger).Log("message", "new user inserted", "user_id", userID)
-
-		}
-	}
-
-	rosterCollection := m.client.Database(m.database).Collection(m.rosterCollection)
-
-	rosterRules := RosterRules{
-		ID:          primitive.NewObjectID(),
-		RosterRules: []RosterRule{},
-	}
-
-	rrDoc := make([]bson.D, len(season.Roster))
-	for idx, rosterRule := range season.Roster {
-		// transformPBUserToUser
-		rrDoc[idx] = bson.D{{"position", int(rosterRule.Position)}, {"max", rosterRule.Max}, {"starting", rosterRule.Starting}}
-
-		rosterRules.RosterRules = append(rosterRules.RosterRules, RosterRule{
-			Position: int(rosterRule.Position),
-			Starting: rosterRule.Starting,
-			Max:      rosterRule.Max,
-		})
-
-	}
-
-	bsonRosterQuery := bson.D{
-		{"rosterrules", bson.D{{"$all", bson.A{rrDoc}}}},
-	}
-
-	filter := bsonRosterQuery
-	findRoster := rosterCollection.FindOne(ctx, filter)
-
-	findRoster.Decode(&rosterRules)
-
-	if findRoster.Err() != nil {
-		insertOne, err := rosterCollection.InsertOne(ctx, rosterRules)
-		if err != nil {
-			return season, err
-		}
-		rosterID, _ := insertOne.InsertedID.(primitive.ObjectID)
-		collection.UpdateOne(ctx, bson.M{"_id": draftID}, bson.M{"$set": bson.M{"roster": rosterID}})
-	}
-
-	// transform to response
-	newSeason, err := transformDraftToPBSeason(*draft)
-	participants, err := m.getUsersByType(ctx, userCollection, draft.ID, "drafts")
-	if err != nil {
-		return newSeason, err
-	}
-	pbParticipants := make([]*pb.User, len(participants))
-	for idx := range participants {
-		pbParticipant, _ := transformUserToPBUser(*participants[idx])
-		pbParticipants[idx] = &pbParticipant
-	}
-	newSeason.Users = pbParticipants
-
-	commissioners, err := m.getUsersByType(ctx, userCollection, draft.ID, "commissioned")
-	if err != nil {
-		return newSeason, err
-	}
-
-	pbCommissioners := make([]*pb.User, len(commissioners))
-	for idx := range commissioners {
-		pbParticipant, _ := transformUserToPBUser(*commissioners[idx])
-		pbCommissioners[idx] = &pbParticipant
-	}
-	newSeason.Commissioners = pbCommissioners
-
-	// roster
-	newSeason.Roster, _ = transformRosterToRosterPB(rosterRules)
-	return newSeason, err
+	return pb.Season{}, nil
 }
 
 func (repo *MongoRepository) getUserCollection(ctx context.Context) *mongo.Collection {
 	return repo.client.Database(repo.database).Collection(repo.userCollection)
 }
 
-func (repo *MongoRepository) SaveUser(ctx context.Context,  draftID primitive.ObjectID, user User) (primitive.ObjectID, error) {
+func (repo *MongoRepository) SaveUser(ctx context.Context, draftID primitive.ObjectID, user User) (primitive.ObjectID, error) {
 	span, ctx := apm.StartSpan(ctx, "SaveUser", "db")
 	defer span.End()
 
@@ -233,8 +260,6 @@ func (repo *MongoRepository) SaveUser(ctx context.Context,  draftID primitive.Ob
 	level.Debug(repo.logger).Log("message", "new user inserted", "user_id", userID)
 	return userID, nil
 }
-
-
 
 // type will either be commissioned or drafts
 func (m MongoRepository) getUsersByType(ctx context.Context, collection *mongo.Collection, draftID primitive.ObjectID, stringType string) ([]*User, error) {
@@ -277,31 +302,8 @@ func (m MongoRepository) ListUserDrafts(ctx context.Context, pbUser pb.User) ([]
 	return []pb.Season{}, nil
 }
 
-func transformPBSeasonToDraft(season pb.Season) (*Draft, error) {
-	yearInt, err := strconv.Atoi(season.Year)
-	if err != nil {
-		return nil, err
-	}
-
-	var draftTime time.Time
-	if season.DraftTime != nil {
-		timeHmmm := time.Unix(season.DraftTime.GetSeconds(), int64(season.DraftTime.Nanos))
-		draftTime = timeHmmm
-	}
-
-	draft := Draft{
-		ID:        primitive.NewObjectID(),
-		Year:      yearInt,
-		League:    int(season.League),
-		DraftType: int(season.DraftType),
-		DraftTime: primitive.NewDateTimeFromTime(draftTime),
-	}
-	//if len(season.ExternalIdentifiers) > 0 {}
-	return &draft, nil
-}
-
 func transformDraftToPBSeason(draft Draft) (pb.Season, error) {
-	yearInt := strconv.Itoa(draft.Year)
+	//yearInt := strconv.Itoa(draft.Year)
 	var timeHmmm *timestamp.Timestamp
 
 	timeTime := draft.DraftTime.Time()
@@ -311,8 +313,8 @@ func transformDraftToPBSeason(draft Draft) (pb.Season, error) {
 	}
 
 	season := pb.Season{
-		ID:        draft.ID.Hex(),
-		Year:      yearInt,
+		ID: draft.ID.Hex(),
+		//:      yearInt,
 		League:    pb.League(draft.League),
 		DraftType: pb.DraftType(draft.DraftType),
 		DraftTime: timeHmmm,

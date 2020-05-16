@@ -82,10 +82,10 @@ func TestService_GetLeaguesSettings(t *testing.T) {
 //
 //
 //	svc := NewService(logger, mockUserInfo)
-//	leagues, err := svc.GetUserResourcesGameLeagues(ctx, "390")
+//	league, err := svc.GetUserResourcesGameLeagues(ctx, "390")
 //	assert.Nil(t, err)
 //	mockUserInfo.AssertExpectations(t)
-//	assert.True(t, len(leagues.GameLeague.Leagues) > 0, "Length of games is not greater than 0")
+//	assert.True(t, len(league.GameLeague.Leagues) > 0, "Length of games is not greater than 0")
 //}
 //
 //func TestService_GetUserResourcesGameLeaguesSettings(t *testing.T) {
@@ -97,11 +97,11 @@ func TestService_GetLeaguesSettings(t *testing.T) {
 //
 //
 //	svc := NewService(logger, mockUserInfo)
-//	leagues, err := svc.GetUserResourcesGameLeagues(ctx, "390")
+//	league, err := svc.GetUserResourcesGameLeagues(ctx, "390")
 //	assert.Nil(t, err)
 //	mockUserInfo.AssertExpectations(t)
 //
-//	for _, league := range leagues.GameLeague.Leagues {
+//	for _, league := range league.GameLeague.Leagues {
 //		_, err := svc.GetLeagueResourcesSettings(ctx, league.LeagueKey)
 //		assert.Nil(t, err)
 //		// getLeague Resource
@@ -123,11 +123,11 @@ func TestService_GetLeaguesSettings(t *testing.T) {
 //
 //
 //	svc := NewService(logger, mockUserInfo)
-//	leagues, err := svc.GetUserResourcesGameTeams(ctx, "390")
+//	league, err := svc.GetUserResourcesGameTeams(ctx, "390")
 //	assert.Nil(t, err)
 //	mockUserInfo.AssertExpectations(t)
 //
-//	for _, league := range leagues.GameLeague.Leagues {
+//	for _, league := range league.GameLeague.Leagues {
 //		_, err := svc.GetLeagueResourcesSettings(ctx, league.LeagueKey)
 //		assert.Nil(t, err)
 //		// getLeague Resource
@@ -153,7 +153,7 @@ func TestService_GetGameResourcesPositionTypes(t *testing.T) {
 
 
 	//svc := NewService(logger, mockUserInfo)
-	//leagues, err := svc.GetGameResourcesPositionTypes(ctx, "390")
+	//league, err := svc.GetGameResourcesPositionTypes(ctx, "390")
 	//assert.Nil(t, err)
 	//mockUserInfo.AssertExpectations(t)
 
@@ -168,11 +168,11 @@ func TestService_GetGameResourcesPositionTypes(t *testing.T) {
 //	mockUserInfo.On("GetCredentialInformation", ctx, mock.AnythingOfType("string")).Return(getUser(), nil)
 //
 //	svc := NewService(logger, mockUserInfo)
-//	leagues, err := svc.GetGameResourcesStatCategories(ctx, "390")
+//	league, err := svc.GetGameResourcesStatCategories(ctx, "390")
 //	assert.Nil(t, err)
 //	mockUserInfo.AssertExpectations(t)
 //
-//	for _, league := range leagues.GameLeague.Leagues {
+//	for _, league := range league.GameLeague.Leagues {
 //		_, err := svc.GetLeagueResourcesSettings(ctx, league.LeagueKey)
 //		assert.Nil(t, err)
 //	}
