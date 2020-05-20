@@ -6,8 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"github.com/go-kit/kit/log"
-	"github.com/thethan/fdr-users/pkg/users"
+	"github.com/thethan/fdr-users/pkg/users/entities"
 	"go.elastic.co/apm"
+	"go.elastic.co/apm/module/apmhttp"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"io/ioutil"
 	"net/http"
@@ -16,26 +17,27 @@ import (
 )
 
 type UserInformation interface {
-	GetCredentialInformation(ctx context.Context, session string) (users.User, error)
+	GetCredentialInformation(ctx context.Context, session string) (entities.User, error)
 }
 
 type UserRepo interface {
-	SaveUser(ctx context.Context, draftID primitive.ObjectID, user users.User) (primitive.ObjectID, error)
+	SaveUser(ctx context.Context, draftID primitive.ObjectID, user entities.User) (primitive.ObjectID, error)
 }
 
 type Service struct {
 	logger   log.Logger
 	userRepo UserInformation
-	client   http.Client
+	client   *http.Client
 	session  string
 }
 
 type ServiceOptions func()
 
 func NewService(logger log.Logger, information UserInformation, ) *Service {
-	svc := Service{logger: logger, userRepo: information, client: http.Client{
+	client := apmhttp.WrapClient(&http.Client{
 		Timeout: 5 * time.Second,
-	}}
+	})
+	svc := Service{logger: logger, userRepo: information, client: client}
 	return &svc
 }
 
@@ -122,7 +124,7 @@ type GameResourceLeagues struct {
 }
 type League struct {
 	LeagueKey             string `xml:"league_key"`
-	LeagueID              int `xml:"league_id"`
+	LeagueID              int    `xml:"league_id"`
 	Name                  string `xml:"name"`
 	URL                   string `xml:"url"`
 	LogoURL               string `xml:"logo_url"`
@@ -183,7 +185,7 @@ type GameResourceLeaguesResponse struct {
 type YahooLeague struct {
 	Text                  string `xml:",chardata"`
 	LeagueKey             string `xml:"league_key"`
-	LeagueID              int `xml:"league_id"`
+	LeagueID              int    `xml:"league_id"`
 	Name                  string `xml:"name"`
 	URL                   string `xml:"url"`
 	LogoURL               string `xml:"logo_url"`
@@ -204,7 +206,7 @@ type YahooLeague struct {
 	StartWeek             string `xml:"start_week"`
 	StartDate             string `xml:"start_date"`
 	EndWeek               int    `xml:"end_week"`
-	EndDate               string    `xml:"end_date"`
+	EndDate               string `xml:"end_date"`
 	IsFinished            string `xml:"is_finished"`
 	GameCode              string `xml:"game_code"`
 	Season                string `xml:"season"`
@@ -321,74 +323,97 @@ type GameResourcePlayerResponse struct {
 	Game        struct {
 		Text               string `xml:",chardata"`
 		GameKey            string `xml:"game_key"`
-		GameID             string `xml:"game_id"`
+		GameID             int    `xml:"game_id"`
 		Name               string `xml:"name"`
 		Code               string `xml:"code"`
 		Type               string `xml:"type"`
 		URL                string `xml:"url"`
-		Season             string `xml:"season"`
-		IsRegistrationOver string `xml:"is_registration_over"`
-		IsGameOver         string `xml:"is_game_over"`
-		IsOffseason        string `xml:"is_offseason"`
+		Season             int    `xml:"season"`
+		IsRegistrationOver int    `xml:"is_registration_over"`
+		IsGameOver         int    `xml:"is_game_over"`
+		IsOffseason        int    `xml:"is_offseason"`
 		Players            struct {
-			Text   string `xml:",chardata"`
-			Count  string `xml:"count,attr"`
-			Player []struct {
-				Text      string `xml:",chardata"`
-				PlayerKey string `xml:"player_key"`
-				PlayerID  string `xml:"player_id"`
-				Name      struct {
-					Text       string `xml:",chardata"`
-					Full       string `xml:"full"`
-					First      string `xml:"first"`
-					Last       string `xml:"last"`
-					AsciiFirst string `xml:"ascii_first"`
-					AsciiLast  string `xml:"ascii_last"`
-				} `xml:"name"`
-				EditorialPlayerKey    string `xml:"editorial_player_key"`
-				EditorialTeamKey      string `xml:"editorial_team_key"`
-				EditorialTeamFullName string `xml:"editorial_team_full_name"`
-				EditorialTeamAbbr     string `xml:"editorial_team_abbr"`
-				ByeWeeks              struct {
-					Text string `xml:",chardata"`
-					Week string `xml:"week"`
-				} `xml:"bye_weeks"`
-				UniformNumber   string `xml:"uniform_number"`
-				DisplayPosition string `xml:"display_position"`
-				Headshot        struct {
-					Text string `xml:",chardata"`
-					URL  string `xml:"url"`
-					Size string `xml:"size"`
-				} `xml:"headshot"`
-				ImageURL          string `xml:"image_url"`
-				IsUndroppable     string `xml:"is_undroppable"`
-				PositionType      string `xml:"position_type"`
-				EligiblePositions struct {
-					Text     string `xml:",chardata"`
-					Position string `xml:"position"`
-				} `xml:"eligible_positions"`
-				HasPlayerNotes           string `xml:"has_player_notes"`
-				PlayerNotesLastTimestamp string `xml:"player_notes_last_timestamp"`
-				Status                   string `xml:"status"`
-				StatusFull               string `xml:"status_full"`
-			} `xml:"player"`
+			Text   string                    `xml:",chardata"`
+			Count  string                    `xml:"count,attr"`
+			Player []GameResourcePlayerStats `xml:"player"`
 		} `xml:"players"`
 	} `xml:"game"`
 }
 
-// GetGameResourcesLeagues
-func (s *Service) GetGameResourcesPlayers(gameKey string) (*GameResourcePlayer, error) {
-	url := fmt.Sprintf("https://fantasysports.yahooapis.com/fantasy/v2/game/%s/players", gameKey)
-	res, err := s.Get(url)
+type GameResourcePlayerStats struct {
+	PlayerKey string `xml:"player_key"`
+	PlayerID  int    `xml:"player_id"`
+	Name      struct {
+		Text       string `xml:",chardata"`
+		Full       string `xml:"full"`
+		First      string `xml:"first"`
+		Last       string `xml:"last"`
+		AsciiFirst string `xml:"ascii_first"`
+		AsciiLast  string `xml:"ascii_last"`
+	} `xml:"name"`
+	EditorialPlayerKey    string `xml:"editorial_player_key"`
+	EditorialTeamKey      string `xml:"editorial_team_key"`
+	EditorialTeamFullName string `xml:"editorial_team_full_name"`
+	EditorialTeamAbbr     string `xml:"editorial_team_abbr"`
+	ByeWeeks              struct {
+		Text string `xml:",chardata"`
+		Week int    `xml:"week"`
+	} `xml:"bye_weeks"`
+	UniformNumber   string `xml:"uniform_number"`
+	DisplayPosition string `xml:"display_position"`
+	Headshot        struct {
+		Text string `xml:",chardata"`
+		URL  string `xml:"url"`
+		Size string `xml:"size"`
+	} `xml:"headshot"`
+	ImageURL          string `xml:"image_url"`
+	IsUndroppable     int    `xml:"is_undroppable"`
+	PositionType      string `xml:"position_type"`
+	EligiblePositions struct {
+		Text     string `xml:",chardata"`
+		Position string `xml:"position"`
+	} `xml:"eligible_positions"`
+	PlayerStats              PlayerStats `xml:"player_stats"`
+	HasPlayerNotes           string      `xml:"has_player_notes"`
+	PlayerNotesLastTimestamp string      `xml:"player_notes_last_timestamp"`
+	Status                   string      `xml:"status"`
+	StatusFull               string      `xml:"status_full"`
+}
 
+type PlayerStats struct {
+	CoverageType string       `xml:"coverage_type"`
+	Season       int          `xml:"season"`
+	Stats        []PlayerStat `xml:"stats>stat"`
+}
+type PlayerStat struct {
+	StatID int `xml:"stat_id"`
+	Value  float32 `xml:"value"`
+}
+
+// GetGameResourcesLeagues
+func (s *Service) GetGameResourcesPlayers(ctx context.Context, gameKey int, start, count int) (GameResourcePlayerResponse, error) {
+
+	url := fmt.Sprintf("https://fantasysports.yahooapis.com/fantasy/v2/game/%d/players/stats?start=%d&count=%d", gameKey, start, count)
+	res, err := s.get(ctx, url)
+
+	v := GameResourcePlayerResponse{}
 	if err != nil {
-		return nil, err
+		return v, err
 	}
 
 	defer res.Body.Close()
 
-	return nil, errors.New("not implemented")
-
+	bytes, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return v, err
+	}
+	// transform response to games
+	err = xml.Unmarshal(bytes, &v)
+	if err != nil {
+		fmt.Printf("error: %v", err)
+		return v, err
+	}
+	return v, nil
 }
 
 type GameResourcesGameWeeks struct {
@@ -702,7 +727,7 @@ type YahooUser struct {
 }
 
 //GetUserResourcesRosterPositions
-func (s *Service) GetUserResourcesGames(ctx context.Context, user users.User) (*UserResourcesGames, error) {
+func (s *Service) GetUserResourcesGames(ctx context.Context) (*UserResourcesGames, error) {
 	url := fmt.Sprintf("https://fantasysports.yahooapis.com/fantasy/v2/users;use_login=1/games")
 	res, err := s.get(ctx, url)
 
@@ -828,12 +853,12 @@ type UserResourcesGameTeams struct {
 }
 
 type Manager struct {
-	ManagerID      string `json:"manager_id"`
-	Nickname       string `json:"nickname"`
-	GUID           string `json:"guid"`
-	IsCurrentLogin string `json:"is_current_login"`
-	Email          string `json:"email"`
-	ImageURL       string `json:"image_url"`
+	ManagerID      string `xml:"manager_id"`
+	Nickname       string `xml:"nickname"`
+	GUID           string `xml:"guid"`
+	IsCurrentLogin string `xml:"is_current_login"`
+	Email          string `xml:"email"`
+	ImageURL       string `xml:"image_url"`
 }
 
 type UserResourcesGameTeamsResponse struct {
@@ -1080,87 +1105,87 @@ type LeagueResourcesSettingsResponse struct {
 	RefreshRate string   `xml:"refresh_rate,attr"`
 	Yahoo       string   `xml:"yahoo,attr"`
 	Xmlns       string   `xml:"xmlns,attr"`
-		League struct {
-			Text                  string `xml:",chardata"`
-			LeagueKey             string `xml:"league_key"`
-			LeagueID              int    `xml:"league_id"`
-			Name                  string `xml:"name"`
-			URL                   string `xml:"url"`
-			LogoURL               string `xml:"logo_url"`
-			Password              string `xml:"password"`
-			DraftStatus           string `xml:"draft_status"`
-			NumTeams              int    `xml:"num_teams"`
-			EditKey               string `xml:"edit_key"`
-			WeeklyDeadline        string `xml:"weekly_deadline"`
-			LeagueUpdateTimestamp string `xml:"league_update_timestamp"`
-			ScoringType           string `xml:"scoring_type"`
-			LeagueType            string `xml:"league_type"`
-			Renew                 string `xml:"renew"`
-			Renewed               string `xml:"renewed"`
-			IrisGroupChatID       string `xml:"iris_group_chat_id"`
-			ShortInvitationURL    string `xml:"short_invitation_url"`
-			AllowAddToDlExtraPos  string `xml:"allow_add_to_dl_extra_pos"`
-			IsProLeague           string `xml:"is_pro_league"`
-			IsCashLeague          string `xml:"is_cash_league"`
-			CurrentWeek           string `xml:"current_week"`
-			StartWeek             string `xml:"start_week"`
-			StartDate             string `xml:"start_date"`
-			EndWeek               string `xml:"end_week"`
-			EndDate               string `xml:"end_date"`
-			GameCode              string `xml:"game_code"`
-			Season                string `xml:"season"`
-			Settings              struct {
-				Text                       string                   `xml:",chardata"`
-				DraftType                  string                   `xml:"draft_type"`
-				IsAuctionDraft             int                      `xml:"is_auction_draft"`
-				ScoringType                string                   `xml:"scoring_type"`
-				PersistentURL              string                   `xml:"persistent_url"`
-				UsesPlayoff                string                   `xml:"uses_playoff"`
-				HasPlayoffConsolationGames int                      `xml:"has_playoff_consolation_games"`
-				PlayoffStartWeek           string                   `xml:"playoff_start_week"`
-				UsesPlayoffReseeding       int                      `xml:"uses_playoff_reseeding"`
-				UsesLockEliminatedTeams    int                      `xml:"uses_lock_eliminated_teams"`
-				NumPlayoffTeams            int                      `xml:"num_playoff_teams"`
-				NumPlayoffConsolationTeams int                      `xml:"num_playoff_consolation_teams"`
-				HasMultiweekChampionship   string                   `xml:"has_multiweek_championship"`
-				UsesRosterImport           int                      `xml:"uses_roster_import"`
-				RosterImportDeadline       string                   `xml:"roster_import_deadline"`
-				WaiverType                 string                   `xml:"waiver_type"`
-				WaiverRule                 string                   `xml:"waiver_rule"`
-				UsesFaab                   int                      `xml:"uses_faab"`
-				DraftPickTime              string                   `xml:"draft_pick_time"`
-				PostDraftPlayers           string                   `xml:"post_draft_players"`
-				MaxTeams                   string                   `xml:"max_teams"`
-				WaiverTime                 string                   `xml:"waiver_time"`
-				TradeEndDate               string                   `xml:"trade_end_date"`
-				TradeRatifyType            string                   `xml:"trade_ratify_type"`
-				TradeRejectTime            string                   `xml:"trade_reject_time"`
-				PlayerPool                 string                   `xml:"player_pool"`
-				CantCutList                string                   `xml:"cant_cut_list"`
-				IsPubliclyViewable         int                      `xml:"is_publicly_viewable"`
-				CanTradeDraftPicks         string                   `xml:"can_trade_draft_picks"`
-				SendbirdChannelURL         string                   `xml:"sendbird_channel_url"`
-				RosterPositions            []ResponseRosterPosition `xml:"roster_positions>roster_position"`
-				StatCategories             struct {
-					Text  string `xml:",chardata"`
-					Stats struct {
-						Text string                 `xml:",chardata"`
-						Stat []ResponseStatCategory `xml:"stat"`
-					} `xml:"stats"`
-				} `xml:"stat_categories"`
-				StatModifiers struct {
-					Text  string `xml:",chardata"`
-					Stats struct {
-						Text string         `xml:",chardata"`
-						Stat []StatModifier `xml:"stat"`
-					} `xml:"stats"`
-				} `xml:"stat_modifiers"`
-			} `xml:"settings"`
-			MaxTrades            int    `xml:"max_trades"`
-			PickemEnabled        string `xml:"pickem_enabled"`
-			UsesFractionalPoints int    `xml:"uses_fractional_points"`
-			UsesNegativePoints   int    `xml:"uses_negative_points"`
-		} `xml:"league"`
+	League      struct {
+		Text                  string `xml:",chardata"`
+		LeagueKey             string `xml:"league_key"`
+		LeagueID              int    `xml:"league_id"`
+		Name                  string `xml:"name"`
+		URL                   string `xml:"url"`
+		LogoURL               string `xml:"logo_url"`
+		Password              string `xml:"password"`
+		DraftStatus           string `xml:"draft_status"`
+		NumTeams              int    `xml:"num_teams"`
+		EditKey               string `xml:"edit_key"`
+		WeeklyDeadline        string `xml:"weekly_deadline"`
+		LeagueUpdateTimestamp string `xml:"league_update_timestamp"`
+		ScoringType           string `xml:"scoring_type"`
+		LeagueType            string `xml:"league_type"`
+		Renew                 string `xml:"renew"`
+		Renewed               string `xml:"renewed"`
+		IrisGroupChatID       string `xml:"iris_group_chat_id"`
+		ShortInvitationURL    string `xml:"short_invitation_url"`
+		AllowAddToDlExtraPos  string `xml:"allow_add_to_dl_extra_pos"`
+		IsProLeague           string `xml:"is_pro_league"`
+		IsCashLeague          string `xml:"is_cash_league"`
+		CurrentWeek           string `xml:"current_week"`
+		StartWeek             string `xml:"start_week"`
+		StartDate             string `xml:"start_date"`
+		EndWeek               string `xml:"end_week"`
+		EndDate               string `xml:"end_date"`
+		GameCode              string `xml:"game_code"`
+		Season                string `xml:"season"`
+		Settings              struct {
+			Text                       string                   `xml:",chardata"`
+			DraftType                  string                   `xml:"draft_type"`
+			IsAuctionDraft             int                      `xml:"is_auction_draft"`
+			ScoringType                string                   `xml:"scoring_type"`
+			PersistentURL              string                   `xml:"persistent_url"`
+			UsesPlayoff                string                   `xml:"uses_playoff"`
+			HasPlayoffConsolationGames int                      `xml:"has_playoff_consolation_games"`
+			PlayoffStartWeek           string                   `xml:"playoff_start_week"`
+			UsesPlayoffReseeding       int                      `xml:"uses_playoff_reseeding"`
+			UsesLockEliminatedTeams    int                      `xml:"uses_lock_eliminated_teams"`
+			NumPlayoffTeams            int                      `xml:"num_playoff_teams"`
+			NumPlayoffConsolationTeams int                      `xml:"num_playoff_consolation_teams"`
+			HasMultiweekChampionship   string                   `xml:"has_multiweek_championship"`
+			UsesRosterImport           int                      `xml:"uses_roster_import"`
+			RosterImportDeadline       string                   `xml:"roster_import_deadline"`
+			WaiverType                 string                   `xml:"waiver_type"`
+			WaiverRule                 string                   `xml:"waiver_rule"`
+			UsesFaab                   int                      `xml:"uses_faab"`
+			DraftPickTime              string                   `xml:"draft_pick_time"`
+			PostDraftPlayers           string                   `xml:"post_draft_players"`
+			MaxTeams                   string                   `xml:"max_teams"`
+			WaiverTime                 string                   `xml:"waiver_time"`
+			TradeEndDate               string                   `xml:"trade_end_date"`
+			TradeRatifyType            string                   `xml:"trade_ratify_type"`
+			TradeRejectTime            string                   `xml:"trade_reject_time"`
+			PlayerPool                 string                   `xml:"player_pool"`
+			CantCutList                string                   `xml:"cant_cut_list"`
+			IsPubliclyViewable         int                      `xml:"is_publicly_viewable"`
+			CanTradeDraftPicks         string                   `xml:"can_trade_draft_picks"`
+			SendbirdChannelURL         string                   `xml:"sendbird_channel_url"`
+			RosterPositions            []ResponseRosterPosition `xml:"roster_positions>roster_position"`
+			StatCategories             struct {
+				Text  string `xml:",chardata"`
+				Stats struct {
+					Text string                 `xml:",chardata"`
+					Stat []ResponseStatCategory `xml:"stat"`
+				} `xml:"stats"`
+			} `xml:"stat_categories"`
+			StatModifiers struct {
+				Text  string `xml:",chardata"`
+				Stats struct {
+					Text string         `xml:",chardata"`
+					Stat []StatModifier `xml:"stat"`
+				} `xml:"stats"`
+			} `xml:"stat_modifiers"`
+		} `xml:"settings"`
+		MaxTrades            int    `xml:"max_trades"`
+		PickemEnabled        string `xml:"pickem_enabled"`
+		UsesFractionalPoints int    `xml:"uses_fractional_points"`
+		UsesNegativePoints   int    `xml:"uses_negative_points"`
+	} `xml:"league"`
 }
 
 func (s *Service) GetLeagueResourcesSettings(ctx context.Context, leagueKey string) (*LeagueResourcesSettingsResponse, error) {
@@ -1355,7 +1380,7 @@ type LeagueResourcesStandingsResponse struct {
 					HasDraftGrade     int        `xml:"has_draft_grade"`
 					DraftGrade        string     `xml:"draft_grade"`
 					Managers          struct {
-						Text    string `xml:",chardata"`
+						Text    string  `xml:",chardata"`
 						Manager Manager `xml:"manager"`
 					} `xml:"managers"`
 					TeamPoints struct {
@@ -1388,9 +1413,9 @@ type f struct {
 
 type OutcomeTotals struct {
 	//Text       int `xml:",chardata"`
-	Wins       int `xml:"wins"`
-	Losses     int `xml:"losses"`
-	Ties       int `xml:"ties"`
+	Wins       int    `xml:"wins"`
+	Losses     int    `xml:"losses"`
+	Ties       int    `xml:"ties"`
 	Percentage string `xml:"percentage"`
 }
 
@@ -2042,9 +2067,9 @@ type GetLeagueResourcesPlayersResponse struct {
 				EditorialTeamAbbr     string `xml:"editorial_team_abbr"`
 				ByeWeeks              struct {
 					Text string `xml:",chardata"`
-					Week string `xml:"week"`
+					Week int    `xml:"week"`
 				} `xml:"bye_weeks"`
-				UniformNumber   string `xml:"uniform_number"`
+				UniformNumber   int    `xml:"uniform_number"`
 				DisplayPosition string `xml:"display_position"`
 				Headshot        struct {
 					Text string `xml:",chardata"`

@@ -2,6 +2,9 @@ package repositories
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/golang/protobuf/ptypes/timestamp"
@@ -11,7 +14,13 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
+
+const database string = "fdr"
+const leaguesCollection string = "leagues"
+const playersBySeason string = "players"
+const playersByWeek string = "players"
 
 type MongoRepository struct {
 	logger                 log.Logger
@@ -69,12 +78,54 @@ func NewMongoRepository(logger log.Logger, client *mongo.Client, database string
 		rosterCollection:       rosterCollection}
 }
 
+// {"teams.manager":{ $elemMatch: {"guid":"DPPQCXCRV75Z2LKJW5YRC7RAYM"}}}
+func (m MongoRepository) GetTeamsForManagers(ctx context.Context, guid string) ([]entities.League, error) {
+	span, ctx := apm.StartSpan(ctx, "CreateLeague", "repository.Mongo")
+	defer span.End()
+
+	collection := m.client.Database(database).Collection(leaguesCollection)
+	var bsonMap bson.M
+	queryString := fmt.Sprintf(`{"teams.manager": {"$elemMatch":{"guid": "%s"}}}`, guid)
+	err := json.Unmarshal([]byte(queryString), &bsonMap)
+	if err != nil {
+		level.Error(m.logger).Log("error", err, "could not make query", "guid", guid, "query", queryString)
+		return []entities.League{}, err
+	}
+
+
+	findOptions := options.Find()
+	// get newest to oldest
+	// will have to flip at some place
+	findOptions.SetSort(bson.D{{"game.game_id", -1}})
+
+	cursor, err := collection.Find(ctx, bsonMap, findOptions)
+	if err != nil {
+		level.Error(m.logger).Log("error", err, "could not find leagues", "guid", guid)
+		return []entities.League{}, err
+	}
+
+	leagues := make([]entities.League, 0)
+	for cursor.Next(ctx) {
+		var league entities.League
+
+		err = cursor.Decode(&league)
+		if err != nil {
+			level.Error(m.logger).Log("message", "could not marshal league", "error", err)
+			return leagues, err
+		}
+		leagues = append(leagues, league)
+	}
+
+	return leagues, nil
+
+}
+
 func (m *MongoRepository) SaveLeague(ctx context.Context, leagueGroupd *entities.LeagueGroup) (*entities.LeagueGroup, error) {
 	span, ctx := apm.StartSpan(ctx, "CreateLeague", "repository.Mongo")
 	defer span.End()
 
 	// save only email
-	collection := m.client.Database("fdr").Collection("leagues")
+	collection := m.client.Database(database).Collection(leaguesCollection)
 	// find previous leagueGroupd if any
 
 	leagueGroupFilter := bson.M{"league_id": leagueGroupd.FirstLeagueID}
@@ -90,24 +141,47 @@ func (m *MongoRepository) SaveLeague(ctx context.Context, leagueGroupd *entities
 		leagGroupID = parentLeague.LeagueGroup
 	}
 
-	for idx := range leagueGroupd.Leagues {
-		leagueGroupd.Leagues[idx].LeagueGroup = leagGroupID
-
-	}
-
-	leagueInterface := make([]interface{}, len(leagueGroupd.Leagues))
-	for idx := range leagueInterface {
+	for _, league := range leagueGroupd.Leagues {
+		league.LeagueGroup = leagGroupID
 		// insert one
-		leagueInterface[idx] = leagueGroupd.Leagues[idx]
+		leagueFilter  := bson.M{"_id": league.LeagueKey}
+		updateOptions := options.FindOneAndReplaceOptions{
+			Upsert:                   aws.Bool(true),
+		}
+
+		upRes := collection.FindOneAndReplace(ctx, leagueFilter, league, &updateOptions)
+
+		fmt.Println(upRes)
 	}
 
-	_, err := collection.InsertMany(ctx, leagueInterface)
-	if err != nil {
-		level.Error(m.logger).Log("message", "could not save draft", "error", err)
-		return leagueGroupd, err
-	}
 
 	return leagueGroupd, nil
+}
+
+func (m *MongoRepository) SavePlayers(ctx context.Context, players []entities.PlayerSeason) ([]entities.PlayerSeason, error) {
+	span, ctx := apm.StartSpan(ctx, "SavePlayers", "repository.Mongo")
+	span.Context.SetLabel("player_count", len(players))
+	defer span.End()
+
+	// save only email
+	collection := m.client.Database(database).Collection(playersBySeason)
+	// find previous leagueGroupd if any
+	updateOptions := &options.UpdateOptions{Upsert: aws.Bool(true)}
+
+	for _, player := range players {
+		playerLeagueFinder := bson.M{"_id": player.PlayerKey}
+
+		playersInterface := player
+		_, err := collection.UpdateOne(ctx, playerLeagueFinder, bson.D{{"$set", playersInterface}}, updateOptions)
+		if err != nil {
+			level.Error(m.logger).Log("message", "could not save player", "error", err, "player_key", player.PlayerKey)
+		}
+	}
+
+	return players, nil
+}
+
+func oldSaveUser() (interface{}, interface{}) {
 	//fmt.Printf("%v", insertedResult.InsertedID)
 	//draftID, _ := insertedResult.InsertedID.(primitive.ObjectID)
 	//

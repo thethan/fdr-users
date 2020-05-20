@@ -7,19 +7,30 @@ import (
 	"github.com/thethan/fdr-users/pkg/draft/entities"
 	"github.com/thethan/fdr-users/pkg/yahoo"
 	"go.elastic.co/apm"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 )
 
-type SaveLeagueIFace interface {
+type SaveLeagueInfoIFace interface {
 	SaveLeague(context.Context, *entities.LeagueGroup) (*entities.LeagueGroup, error)
+	SavePlayers(context.Context, []entities.PlayerSeason) ([]entities.PlayerSeason, error)
+	GetTeamsForManagers(ctx context.Context, guid string) ([]entities.League, error)
+}
+
+type ImportYahooData interface {
+	GetUserLeagues(ctx context.Context, guid string) ([]*entities.LeagueGroup, error)
+	ImportFromUser(ctx context.Context, userGames *yahoo.UserResourcesGameLeaguesResponse) ([]*entities.LeagueGroup, error)
+}
+type NewImporterService interface {
+	NewImporterWithService(svc *yahoo.Service) ImportYahooData
 }
 
 type dataTransferObjects struct {
-	mu                  *sync.Mutex
+	leagueMu            *sync.Mutex
+	leagueGroupMu       *sync.Mutex
+	leagueTeamsMu       *sync.Mutex
 	gameMapToIdx        map[int]int
 	leagueMaps          map[int]int
 	teamMaps            map[int]int
@@ -34,15 +45,15 @@ type dataTransferObjects struct {
 }
 
 func (d *dataTransferObjects) addLeague(league entities.League) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
+	d.leagueMu.Lock()
+	defer d.leagueMu.Unlock()
 	d.leagues = append(d.leagues, league)
 	d.leagueMaps[league.LeagueID] = len(d.leagues)
 }
 
 func (d *dataTransferObjects) addTeam(team entities.Team) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
+	d.leagueTeamsMu.Lock()
+	defer d.leagueTeamsMu.Unlock()
 
 	for idx := range team.Manager {
 		if useridx, ok := d.userMaps[team.Manager[idx].Email]; ok {
@@ -54,8 +65,8 @@ func (d *dataTransferObjects) addTeam(team entities.Team) {
 }
 
 func (d *dataTransferObjects) addUser(user entities.User) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
+	d.leagueMu.Lock()
+	defer d.leagueMu.Unlock()
 	if _, ok := d.userMaps[user.ManagerID]; !ok {
 		d.users = append(d.users, &user)
 		d.userMaps[user.Email] = len(d.users)
@@ -63,8 +74,8 @@ func (d *dataTransferObjects) addUser(user entities.User) {
 }
 
 func (d *dataTransferObjects) addGames(game entities.Game) *entities.Game {
-	d.mu.Lock()
-	defer d.mu.Unlock()
+	d.leagueMu.Lock()
+	defer d.leagueMu.Unlock()
 	gameIdx, ok := d.gameMapToIdx[game.GameID]
 	if !ok {
 		currentGameLen := len(d.games)
@@ -76,8 +87,8 @@ func (d *dataTransferObjects) addGames(game entities.Game) *entities.Game {
 }
 
 func (d *dataTransferObjects) addLeagueToLeagueGroup(parentLeagueID int, league entities.League) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
+	d.leagueGroupMu.Lock()
+	defer d.leagueGroupMu.Unlock()
 	// find group IDx
 	var leagueGroup *entities.LeagueGroup
 	// see if already created by finding the index
@@ -103,10 +114,10 @@ type Importer struct {
 	logger log.Logger
 
 	yahooService *yahoo.Service
-	repo         SaveLeagueIFace
+	repo         SaveLeagueInfoIFace
 }
 
-func NewImportService(logger log.Logger, yahooService *yahoo.Service, repo SaveLeagueIFace) Importer {
+func NewImportService(logger log.Logger, yahooService *yahoo.Service, repo SaveLeagueInfoIFace) Importer {
 	return Importer{
 		logger:       logger,
 		yahooService: yahooService,
@@ -116,7 +127,9 @@ func NewImportService(logger log.Logger, yahooService *yahoo.Service, repo SaveL
 
 func newDTO() dataTransferObjects {
 	return dataTransferObjects{
-		mu:                  &sync.Mutex{},
+		leagueMu:            &sync.Mutex{},
+		leagueGroupMu:       &sync.Mutex{},
+		leagueTeamsMu:       &sync.Mutex{},
 		games:               make([]*entities.Game, 0, 400),
 		leagues:             make([]entities.League, 0, 1000),
 		leagueGroups:        make([]*entities.LeagueGroup, 0, 1000),
@@ -128,6 +141,104 @@ func newDTO() dataTransferObjects {
 		users:               make([]*entities.User, 0, 1000),
 		teams:               make([]*entities.Team, 0, 1000),
 	}
+}
+
+func (i *Importer) NewImporterWithService(svc *yahoo.Service) ImportYahooData {
+	i.yahooService = svc
+	return i
+}
+
+func (i *Importer) GetUserLeagues(ctx context.Context, guid string) ([]*entities.LeagueGroup, error) {
+	dto := newDTO()
+	leagues, err := i.repo.GetTeamsForManagers(ctx, guid)
+	if err != nil {
+		level.Error(i.logger).Log("message", "could not get user teams", "error", err, "guid", guid)
+	}
+
+	for i := len(leagues) -1; i >= 0; i-- {
+		dto.addLeague(leagues[i])
+		parentLeagueID := 0
+		ids := strings.Split(leagues[i].Settings.Renew, "_")
+		if len(ids) > 1 {
+			parentLeagueID, _ = strconv.Atoi(ids[1])
+			leagues[i].PreviousLeague = &parentLeagueID
+		}
+
+		// check if parentID exists
+		dto.addLeagueToLeagueGroup(parentLeagueID, leagues[i])
+	}
+	return dto.leagueGroups, nil
+}
+
+func (i *Importer) ImportFromUser(ctx context.Context, userGames *yahoo.UserResourcesGameLeaguesResponse) ([]*entities.LeagueGroup, error) {
+	span, ctx := apm.StartSpan(ctx, "ImportFromUser", "service")
+	defer func() {
+		span.End()
+	}()
+
+	leagueChan := make(chan entities.League, 100)
+	a := newDTO()
+	dto := &a
+	wg := &sync.WaitGroup{}
+
+	go func() {
+		for {
+			select {
+			case league := <-leagueChan:
+
+				dto.addLeague(league)
+				parentLeagueID := 0
+				ids := strings.Split(league.Settings.Renew, "_")
+				if len(ids) > 1 {
+					parentLeagueID, _ = strconv.Atoi(ids[1])
+					league.PreviousLeague = &parentLeagueID
+				}
+
+				// check if parentID exists
+				dto.addLeagueToLeagueGroup(parentLeagueID, league)
+				wg.Done()
+			}
+		}
+	}()
+
+	for _, yahooGame := range userGames.Users.User.Games.Game {
+		game := transformGameResponseToGame(yahooGame)
+		dto.games = append(dto.games, &game)
+		for _, leagueRes := range yahooGame.Leagues {
+			wg.Add(1)
+			err := i.getLeague(ctx, game, leagueRes, leagueChan)
+			if err != nil {
+				level.Error(i.logger).Log("message", "error in getting league information", "league_key", leagueRes.LeagueKey, "error", err)
+			}
+
+		}
+	}
+	wg.Wait()
+	// sort dtos
+	for idx, leagueGroup := range dto.leagueGroups {
+		sort.SliceStable(leagueGroup.Leagues, func(i, j int) bool {
+			return leagueGroup.Leagues[i].Game.GameID < leagueGroup.Leagues[j].Game.GameID
+		})
+
+		dto.leagueGroups[idx] = leagueGroup
+	}
+
+	leagueGroupsWg := &sync.WaitGroup{}
+	leagueGroupsWg.Add(len(dto.leagueGroups))
+	for _, leagueGroup := range dto.leagueGroups {
+		// add league group to the first one
+		go func(leagueGroup *entities.LeagueGroup) {
+			_, err := i.repo.SaveLeague(ctx, leagueGroup)
+			if err != nil {
+				level.Error(i.logger).Log("error", err)
+			}
+			leagueGroupsWg.Done()
+		}(leagueGroup)
+	}
+	leagueGroupsWg.Wait()
+
+	return dto.leagueGroups, nil
+
 }
 
 func (i *Importer) ImportLeagueFromUser(ctx context.Context) ([]*entities.LeagueGroup, error) {
@@ -143,67 +254,10 @@ func (i *Importer) ImportLeagueFromUser(ctx context.Context) ([]*entities.League
 		return []*entities.LeagueGroup{}, err
 	}
 
-	a := newDTO()
-	dto := &a
-
-	lgspan, ctx := apm.StartSpan(ctx, "importer.extractData", "service")
-	for _, gameRes := range res.Users.User.Games.Game {
-		// add game to dto
-		game := transformGameResponseToGame(gameRes)
-		dto.games = append(dto.games, &game)
-
-		//yahooLeagues := make([]yahoo.YahooLeague, res.Users.User.Games.Count)
-		for _, leagueRes := range gameRes.Leagues {
-			dto, err = i.getLeague(ctx, game, leagueRes, dto)
-			if err != nil {
-				level.Error(i.logger).Log("message", "error in getting league information", "league_key", leagueRes.LeagueKey, "error", err)
-				continue
-			}
-		}
-	}
-	lgspan, ctx = apm.StartSpan(ctx, "importer.transformLeagues", "service")
-	// filter out the composition for dto
-	for _, league := range dto.leagues {
-
-		// find league group
-		parentLeagueID := 0
-		ids := strings.Split(league.Settings.Renew, "_")
-		if len(ids) > 1 {
-			parentLeagueID, _ = strconv.Atoi(ids[1])
-			league.PreviousLeague = &parentLeagueID
-		}
-
-		// check if parentID exists
-		dto.addLeagueToLeagueGroup(parentLeagueID, league)
-	}
-	lgspan.End()
-
-	// sort dtos
-	for idx, leagueGroup := range dto.leagueGroups {
-		sort.SliceStable(leagueGroup.Leagues, func(i, j int) bool {
-			return leagueGroup.Leagues[i].Game.GameID < leagueGroup.Leagues[j].Game.GameID
-		})
-
-		dto.leagueGroups[idx] = leagueGroup
-	}
-
-	// save league groups to repo
-	tSpan, ctx := apm.StartSpan(ctx, "importer.transformLeagues", "service")
-	//leagueGroups := make([]*entities.LeagueGroup, len(dto.leagueGroups))
-	for _, leagueGroup := range dto.leagueGroups {
-		// add league group to the first one
-		_, err := i.repo.SaveLeague(ctx, leagueGroup)
-		if err != nil {
-			level.Error(i.logger).Log("error", err)
-		}
-	}
-	tSpan.End()
-	//return leagueGroups, nil
-
-	return dto.leagueGroups, nil
+	return i.ImportFromUser(ctx, res)
 }
 
-func (i *Importer) getLeague(ctx context.Context, game entities.Game, leagueRes yahoo.YahooLeague, dto *dataTransferObjects) (*dataTransferObjects, error) {
+func (i *Importer) getLeague(ctx context.Context, game entities.Game, leagueRes yahoo.YahooLeague, leagueChan chan entities.League) error {
 	level.Debug(i.logger).Log("name", leagueRes.Name)
 	var league entities.League
 
@@ -213,7 +267,7 @@ func (i *Importer) getLeague(ctx context.Context, game entities.Game, leagueRes 
 	yahooSettings, err := i.yahooService.GetLeagueResourcesSettings(ctx, leagueRes.LeagueKey)
 	if err != nil {
 		level.Error(i.logger).Log("message", "error in getting league Resource setting", "error", err)
-		return dto, err
+		return err
 	}
 	settings := transformYahooLeagueSettingsToLeagueSettings(yahooSettings)
 	league.Settings = &settings
@@ -223,14 +277,14 @@ func (i *Importer) getLeague(ctx context.Context, game entities.Game, leagueRes 
 	yahooStandings, err := i.yahooService.GetLeagueResourcesStandings(ctx, leagueRes.LeagueKey)
 	if err != nil {
 		level.Error(i.logger).Log("message", "error in getting league Resource standings", "error", err)
-		return dto, err
+		return err
 	}
 
 	teams := transformYahooStandingsToStandings(yahooStandings)
 	league.Teams = teams
-	dto.addLeague(league)
-	return dto, nil
 
+	leagueChan <- league
+	return nil
 }
 
 func (i *Importer) ImportTeamsFromUser(ctx context.Context) {
@@ -448,7 +502,6 @@ func transformYahooStandingsToStandings(standings *yahoo.LeagueResourcesStanding
 		user := transformManagerToUser(yahooTeam.Managers.Manager)
 		teams[idx] = entities.Team{
 
-			League:                primitive.NewObjectID(),
 			TeamKey:               yahooTeam.TeamKey,
 			TeamID:                yahooTeam.TeamID,
 			Name:                  yahooTeam.Name,

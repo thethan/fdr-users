@@ -1,7 +1,6 @@
 package entities
 
 import (
-	"github.com/thethan/fdr-users/pkg/yahoo"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"strconv"
 	"strings"
@@ -21,21 +20,21 @@ type User struct {
 }
 
 type LeagueGroup struct {
-	ID            primitive.ObjectID `bson:"_id"`
-	FirstLeagueID int                `bson:"first_league_id"`
-	Leagues       []League
+	ID            primitive.ObjectID `bson:"_id" json:"id"`
+	FirstLeagueID int                `bson:"first_league_id" json:"first_league_id"`
+	Leagues       []League           `json:"leagues" bson:"leagues"`
 }
 
 type League struct {
-	LeagueKey      string                             `bson:"_id"`
-	Name           string                             `bson:"name"`
-	LeagueID       int                                `bson:"league_id"`
-	LeagueGroup    primitive.ObjectID                 `bson:"league_group_id"`
-	PreviousLeague *int                               `bson:"previous_league_id"`
-	Settings       *LeagueSettings                    // year in which settings are for
-	DraftResults   *yahoo.LeagueResourcesDraftResults // This is results by Year
-	Teams          []Team                             // season is the key
-	Game           Game                               // season is the key
+	LeagueKey      string             `bson:"_id" json:"id"`
+	Name           string             `bson:"name" json:"name"`
+	LeagueID       int                `bson:"league_id" json:"league_id"`
+	LeagueGroup    primitive.ObjectID `bson:"league_group_id" json:"league_group"`
+	PreviousLeague *int               `bson:"previous_league_id" json:"previous_league_id"`
+	Settings       *LeagueSettings    `bson:"settings" json:"settings" ` // year in which settings are for
+	//DraftResults   *yahoo.LeagueResourcesDraftResults `bson:"draft_results"`// This is results by Year
+	Teams []Team `bson:"teams" json:"teams"` // season is the key
+	Game  Game   `json:"game" bson:"game"`   // season is the key
 }
 
 func (l *League) GetParentID() *int {
@@ -183,22 +182,21 @@ type RosterAdds struct {
 }
 
 type Team struct {
-	League                primitive.ObjectID `json:"league_id"`
-	TeamKey               string             `json:"team_key"`
-	TeamID                int                `json:"team_id"`
-	Name                  string             `json:"name"`
-	IsOwnedByCurrentLogin bool               `json:"is_owned_by_current_login"`
-	URL                   string             `json:"url"`
-	TeamLogo              TeamLogo           `json:"team_logo"`
-	WaiverPriority        int                `json:"waiver_priority"`
-	NumberOfMoves         int                `json:"number_of_moves"`
-	NumberOfTrades        int                `json:"number_of_trades"`
-	RosterAdds            RosterAdds         `json:"roster_adds"`
-	LeagueScoringType     string             `json:"league_scoring_type"`
-	HasDraftGrade         bool               `json:"has_draft_grade"`
-	DraftGrade            string             `json:"draft_grade"`
-	Standing              Standings          `json:"standing"`
-	Manager               []User             `json:"managers"`
+	TeamKey               string     `json:"team_key" bson:"team_key"`
+	TeamID                int        `json:"team_id"  bson:"team_id"`
+	Name                  string     `json:"name" `
+	IsOwnedByCurrentLogin bool       `json:"is_owned_by_current_login" bson:"is_owned_by_current_login"`
+	URL                   string     `json:"url"`
+	TeamLogo              TeamLogo   `json:"team_logo" bson:"team_logo"`
+	WaiverPriority        int        `json:"waiver_priority" bson:"waiver_priority"`
+	NumberOfMoves         int        `json:"number_of_moves" bson:"number_of_moves"`
+	NumberOfTrades        int        `json:"number_of_trades" bson:"number_of_trades"`
+	RosterAdds            RosterAdds `json:"roster_adds" bson:"roster_adds"`
+	LeagueScoringType     string     `json:"league_scoring_type" bson:"league_scroting_Type"`
+	HasDraftGrade         bool       `json:"has_draft_grade" bson:"has_draft_grade"`
+	DraftGrade            string     `json:"draft_grade" bson:"draft_grade"`
+	Standing              Standings  `json:"standing" `
+	Manager               []User     `json:"managers"`
 }
 
 type Outcome struct {
@@ -210,9 +208,9 @@ type Outcome struct {
 
 type Standings struct {
 	Rank          int     `json:"rank"`
-	PlayoffSeed   int     `json:"playoff_seed"`
-	OutcomeTotals Outcome `json:"outcome_totals"`
-	GamesBack     string  `json:"games_back"`
-	PointsFor     float32 `json:"points_for"`
-	PointsAgainst float32 `json:"points_against"`
+	PlayoffSeed   int     `json:"playoff_seed" bson:"playoff_seed"`
+	OutcomeTotals Outcome `json:"outcome_totals" bson:"outcome_totals"`
+	GamesBack     string  `json:"games_back" bson:"games_back"`
+	PointsFor     float32 `json:"points_for" bson:"points_for"`
+	PointsAgainst float32 `json:"points_against" bson:"points_against"`
 }

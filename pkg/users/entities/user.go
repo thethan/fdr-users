@@ -1,4 +1,4 @@
-package users
+package entities
 
 import "time"
 
@@ -12,6 +12,7 @@ type User struct {
 	FirstName         string
 	LastName          string
 	NickName          string
+	GUID              string
 	Description       string
 	UserID            string
 	AvatarURL         string
@@ -22,4 +23,3 @@ type User struct {
 	ExpiresAt         time.Time
 	IDToken           string
 }
-

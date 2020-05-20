@@ -15,7 +15,9 @@ import (
 	grpc_auth "github.com/grpc-ecosystem/go-grpc-middleware/auth"
 	"github.com/oklog/run"
 	"github.com/thethan/fdr-users/pkg/coordinator/transports"
-	"github.com/thethan/fdr-users/pkg/goff"
+	"github.com/thethan/fdr-users/pkg/draft/repositories"
+	"github.com/thethan/fdr-users/pkg/league"
+	"github.com/thethan/fdr-users/pkg/mongo"
 	"github.com/thethan/fdr-users/pkg/yahoo"
 	"go.elastic.co/apm/module/apmgorilla"
 	"net/http"
@@ -87,14 +89,13 @@ func init() {
 	if addr := os.Getenv("SERVICE_ACCOUNT_FILE_LOCATION"); addr != "" {
 		DefaultConfig.ServiceAccountFileLocation = addr
 	} else {
-		fmt.Println("could not get service account location")
+		fmt.Println(fmt.Sprintf("could not get service account location %s", ))
 		os.Exit(1)
 	}
 
 	apm.DefaultTracer.SetLogger(logrusLogger)
 	logrusLogger.AddHook(&apmlogrus.Hook{})
 }
-
 
 type serviceAccount struct {
 	ProjectID               string `json:"project_id"`
@@ -149,26 +150,25 @@ func main() {
 
 	authSvc := auth.NewAuthService(logger, &authRepo)
 
-	yahooProvider := yahoo.NewService(logger, &repo,)
-	goffYahooClient := goff.NewClient(yahooProvider)
-	coordinatorService := coordinator.NewService(logger, logrusLogger, goffYahooClient, &repo)
-	//mongoClient, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"))
-	//if err != nil {
-	//	logger.Log("message", "error in initializing mongo client", "error", err)
-	//	os.Exit(1)
-	//}
-	coordinatorEndpoints := coordinator.NewEndpoints(logrusLogger, coordinatorService, authSvc.NewAuthMiddleware(&repo))
+	yahooProvider := yahoo.NewService(logger, &repo)
+
+	mongoClient, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"))
+	if err != nil {
+		logger.Log("message", "error in initializing mongo client", "error", err)
+		os.Exit(1)
+	}
+	mongoRepo := repositories.NewMongoRepository(logger, mongoClient, "fdr", "draft", "fdr_user", "roster")
+	importService := league.NewImportService(logger, yahooProvider, &mongoRepo)
+	coordinatorEndpoints := coordinator.NewEndpoints(logrusLogger, importService, authSvc.NewAuthMiddleware(&repo))
 	_ = transports.NewServer(logger, logrusLogger, coordinatorEndpoints)
-	coordinatorHTTPServer := transports.NewHTTPServer(logrusLogger, coordinatorEndpoints, authSvc.ServerBefore)
-	endpoints := users.NewEndpoints(logger, &repo, &repo, authSvc.NewAuthMiddleware(&repo), authSvc.ServerBefore)
+	endpoints := users.NewEndpoints(logger, &repo, &repo, &importService, authSvc.NewAuthMiddleware(&repo), authSvc.ServerBefore)
 
 	router := mux.NewRouter()
 	apmgorilla.Instrument(router)
-	router.Methods(http.MethodGet).PathPrefix("/import").HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		writer.WriteHeader(http.StatusAlreadyReported)
-	})
+	router = transports.NewHTTPServer(logrusLogger, router, coordinatorEndpoints, authSvc.ServerBefore)
 
-	router.Methods(http.MethodPost).PathPrefix("/import").Handler(coordinatorHTTPServer)
+
+
 	users.MakeHTTPHandler(endpoints, router, authSvc.ServerBefore)
 
 	// Mechanical domain.

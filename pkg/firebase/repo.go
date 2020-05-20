@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/thethan/fdr-users/pkg/users"
+	"github.com/thethan/fdr-users/pkg/users/entities"
 
 	"go.elastic.co/apm"
 )
@@ -27,8 +27,9 @@ func NewFirebaseRepository(logger log.Logger, firestore *firestore.Client) Repo 
 const AccessKey = "access_token"
 const RefreshToken = "refresh_token"
 const Email = "email"
+const Guid = "guid"
 
-func (r *Repo) GetCredentialInformation(ctx context.Context, uid string) (users.User, error) {
+func (r *Repo) GetCredentialInformation(ctx context.Context, uid string) (entities.User, error) {
 	span, ctx := apm.StartSpan(ctx, "GetCredentialInformation", "db.firebase.init")
 	defer span.End()
 
@@ -36,19 +37,19 @@ func (r *Repo) GetCredentialInformation(ctx context.Context, uid string) (users.
 	if docuRef == nil {
 		level.Error(r.logger).Log("message", "error in getting firestore docuref", "error", errors.New("yeah no docuref"))
 
-		return users.User{}, errors.New("connect ")
+		return entities.User{}, errors.New("connect ")
 	}
 
 	snapShot, err := r.getDocumentReference(ctx, docuRef)
 	if err != nil {
 		level.Error(r.logger).Log("message", "error in getting firestore snapshot", "error", err)
 
-		return users.User{}, err
+		return entities.User{}, err
 	}
 
 	if !snapShot.Exists() {
 		level.Error(r.logger).Log("message", "snapshot did not exist", "error", err)
-		return users.User{}, err
+		return entities.User{}, err
 	}
 
 	var accessKey string
@@ -56,27 +57,27 @@ func (r *Repo) GetCredentialInformation(ctx context.Context, uid string) (users.
 	keyInterface, ok := data[AccessKey]
 	if !ok {
 		level.Error(r.logger).Log("message", "data did not have access key")
-		return users.User{}, errors.New("goth did not have access key")
+		return entities.User{}, errors.New("goth did not have access key")
 	}
 
 	accessKey, ok = keyInterface.(string)
 	if !ok {
 		_ = level.Error(r.logger).Log("message", "access key is not a string ")
-		return users.User{}, errors.New("access key was not a string")
+		return entities.User{}, errors.New("access key was not a string")
 	}
 
-	return users.User{AccessToken: accessKey}, nil
+	return entities.User{AccessToken: accessKey}, nil
 }
 
 func (r *Repo) getDocumentReference(ctx context.Context, docuRef *firestore.DocumentRef) (*firestore.DocumentSnapshot, error) {
-	span, ctx := apm.StartSpan(ctx, "GetCredentialInformation", "db.firebase.query")
+	span, ctx := apm.StartSpan(ctx, "GetCredentialInformation", "db.firebase")
 	defer span.End()
 
 	return docuRef.Get(ctx)
 }
 
-func (r *Repo) SaveYahooCredential(ctx context.Context, uid, accessToken string) (users.User, error) {
-	span, ctx := apm.StartSpan(ctx, "SaveYahooCredential", "db.firebase.init")
+func (r *Repo) SaveYahooCredential(ctx context.Context, uid, accessToken, guid string) (entities.User, error) {
+	span, ctx := apm.StartSpan(ctx, "SaveYahooCredential", "db.firebase")
 	defer span.End()
 
 	data := make(map[string]interface{}, 1)
@@ -87,17 +88,18 @@ func (r *Repo) SaveYahooCredential(ctx context.Context, uid, accessToken string)
 	}
 
 	data[AccessKey] = accessToken
+	data[Guid] = guid
 	_, err := docuRef.Set(ctx, data)
 	if err != nil {
 		_ = level.Error(r.logger).Log("message", "could not save docuref ", "error", err)
-		return users.User{}, errors.New("access could not be set")
+		return entities.User{}, errors.New("access could not be set")
 	}
 
-	return users.User{AccessToken: accessToken}, nil
+	return entities.User{AccessToken: accessToken}, nil
 }
 
-func (r *Repo) SaveYahooInformation(ctx context.Context, uid, accessToken, refreshToken, email string) (users.User, error) {
-	span, ctx := apm.StartSpan(ctx, "SaveYahooCredential", "db.firebase.init")
+func (r *Repo) SaveYahooInformation(ctx context.Context, uid, accessToken, refreshToken, email, guid string) (entities.User, error) {
+	span, ctx := apm.StartSpan(ctx, "SaveYahooInformation", "db.firebase")
 	defer span.End()
 
 	data := make(map[string]interface{}, 1)
@@ -109,12 +111,13 @@ func (r *Repo) SaveYahooInformation(ctx context.Context, uid, accessToken, refre
 
 	data[AccessKey] = accessToken
 	data[RefreshToken] = refreshToken
+	data[Guid] = guid
 	data[Email] = email
 	_, err := docuRef.Set(ctx, data)
 	if err != nil {
 		_ = level.Error(r.logger).Log("message", "could not save docuref ", "error", err)
-		return users.User{}, errors.New("access could not be set")
+		return entities.User{}, errors.New("access could not be set")
 	}
 
-	return users.User{AccessToken: accessToken}, nil
+	return entities.User{AccessToken: accessToken}, nil
 }

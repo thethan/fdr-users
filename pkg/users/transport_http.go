@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/thethan/fdr-users/pkg/draft/entities"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -51,7 +52,6 @@ func MakeHTTPHandler(endpoints Endpoints, m *mux.Router, authServerBefore httptr
 		httptransport.ServerBefore(headersToContext),
 		httptransport.ServerErrorEncoder(errorEncoder),
 		httptransport.ServerAfter(httptransport.SetContentType(contentType)),
-
 	}
 	serverOptions = append(serverOptions, options...)
 	serverOptionsAuth := append(serverOptions, httptransport.ServerBefore(authServerBefore))
@@ -86,7 +86,7 @@ func MakeHTTPHandler(endpoints Endpoints, m *mux.Router, authServerBefore httptr
 	m.Methods("POST").Path("/info").Handler(httptransport.NewServer(
 		endpoints.SaveUserInfoEndpoint,
 		DecodeHTTPSaveCredentialByUserIDRequest,
-		EncodeHTTPGenericResponse,
+		EncodeHTTPSaveCredentialByUserIDRequest,
 		serverOptions...,
 	))
 	return m
@@ -285,6 +285,17 @@ type UserCredentialRequest struct {
 	UID          string `json:"uid"`
 	Session      string `json:"session"`
 	RefreshToken string `json:"refresh_token"`
+	Guid         string `json:"guid"`
+
+	Email string `json:"email"`
+}
+
+type UserCredentialResponse struct {
+	UID          string `json:"uid"`
+	Session      string `json:"session"`
+	RefreshToken string `json:"refresh_token"`
+	Guid         string `json:"guid"`
+	Leagues      []*entities.LeagueGroup `json:"leagues"`
 	Email        string `json:"email"`
 }
 
@@ -318,30 +329,49 @@ func DecodeHTTPSaveCredentialByUserIDRequest(_ context.Context, r *http.Request)
 	return &req, err
 }
 
+// EncodeHTTPGenericResponse is a transport/http.EncodeResponseFunc that encodes
+// the response as JSON to the response writer. Primarily useful in a server.
+func EncodeHTTPSaveCredentialByUserIDRequest(_ context.Context, w http.ResponseWriter, response interface{}) error {
+	res, ok := response.(*UserCredentialResponse)
+	if !ok {
+		return errors.New("could not get user Credentials Response ")
+	}
+	bytesJson, err := json.Marshal(&res)
+	if err != nil {
+		return err
+	}
+	w.Write(bytesJson)
+	return nil
+}
+
 func DecodeHTTPSaveCredentialRequest(_ context.Context, r *http.Request) (interface{}, error) {
 	defer r.Body.Close()
-	var req pb.CredentialRequest
+	var req CredentialRequest
 	buf, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		return nil, errors.Wrapf(err, "cannot read body of http request")
 	}
-	if len(buf) > 0 {
-		// AllowUnknownFields stops the unmarshaler from failing if the JSON contains unknown fields.
-		unmarshaller := jsonpb.Unmarshaler{
-			AllowUnknownFields: true,
-		}
-		if err = unmarshaller.Unmarshal(bytes.NewBuffer(buf), &req); err != nil {
-			const size = 8196
-			if len(buf) > size {
-				buf = buf[:size]
-			}
-			return nil, httpError{errors.Wrapf(err, "request body '%s': cannot parse non-json request body", buf),
-				http.StatusBadRequest,
-				nil,
-			}
-		}
-	}
+	//if len(buf) > 0 {
+	//	// AllowUnknownFields stops the unmarshaler from failing if the JSON contains unknown fields.
+	//	unmarshaller := jsonpb.Unmarshaler{
+	//		AllowUnknownFields: true,
+	//	}
+	//	if err = unmarshaller.Unmarshal(bytes.NewBuffer(buf), &req); err != nil {
+	//		const size = 8196
+	//		if len(buf) > size {
+	//			buf = buf[:size]
+	//		}
+	//		return nil, httpError{errors.Wrapf(err, "request body '%s': cannot parse non-json request body", buf),
+	//			http.StatusBadRequest,
+	//			nil,
+	//		}
+	//	}
+	//}
 
+	err = json.Unmarshal(buf, &req)
+	if err != nil {
+		return nil, err
+	}
 	pathParams := mux.Vars(r)
 	_ = pathParams
 

@@ -6,7 +6,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"github.com/thethan/fdr-users/pkg/users"
+	"github.com/thethan/fdr-users/pkg/users/entities"
 	"testing"
 )
 
@@ -14,16 +14,16 @@ type mockGetUserInformation struct {
 	mock.Mock
 }
 
-func getUser() users.User {
-	return users.User{
+func getUser() entities.User {
+	return entities.User{
 		AccessToken: "yobokzCY4x_Btuckuyb67JaTPDi7M.zEvtt_ZmIoKSUPvcc.ayGoBdlLdczPjo3AlD1RbWBf8yfUQ5lXlxXXjOSgRBn9CKIm0O2hKqggqIW9.B4LpczY774ui05fCcQ77SQ57fR2IgRp1XJFqd1CHqagJ1jDUj_yJm.TKiXzdLUYDtaedAR86IOXRbdsKZwTWp08GXo8ijSJgavoVVBURr5lVCy42QoVuc8Kk9rzsRbSJYZ93WtthvA.Bmj1lj.TQ_AYbhlGv.qzlRrJ0ZhlK8Xhd_NFmdDvW5mPE2qTTP0ZytIX0VGLKrnK5AYnhx6el1g3xVtOaH92uKv2CTE1AlDyBz4zln4NFaLczGjJD2.yge_SPv6l5ULukwYZ1W8RK9ijpZv0VE2PUeKXPYQ2fNZRRTd5_exOGlPvy9E.ggg5sC2scCwTKDtZJrUPcPMcoBNex39LrQmJ9M.mdx9b.x8stZtKfa5h8HsNKvkAhNqgOgUSXPGeCQVkWLRt9.K3rmwPxy90xTjNVLaSmwgJWX30w1kgw4X0TA1Ba3y3NG8knxCsF4hGGVTfR.NKXLxb9KrwP7HIrklwqGWSPPhmRPd5TM_flwgioK.BwPn2AHuXwqJrAtqzAQiz3oBdpJSCIlSbFAmvVyH05YAj8S7FpbvoTynRM7AHyuAUGvptkaxT3hc3aKv417C3gSD9EmPa9FfTYt6RMucw_03tazB0G3G_A_G7hjf0zHrPZEPTRq6CQXTyfy1csX0d8oU_WJN.NlgLrEk4KYe59U8TEWhIs4PUpgCg2EPZ2vhp4ycy63ZlWKBscSizCcvZGYfJcpbwz_T4iKZjn3909e4sooxGCqg7RhvFqFMcrKIygdvcTI_rXfw8Tye7bRLNTa.1xJhPdJlxTZKuhOmY2CiXS_LlAtt_HILnTyahrpEJw574YUXM0Lw6dyFEwLd44WnWm9e21TBjKjR6Ddo8.AYWxHXcvSXFaZJyFsMJjFHvT0kSbs4S71isRuP4jsJZEvfHQ.Xmvl1q1HkWd_G13OhnrYKuZ.kR4zeMfpry3H7qFFK7vhTgtp8Cb07UkgrPAL5CiGqQxCYzj9Ts_eTk0egQW9IxOr0MfBy4iLkDFb_bdpF.M.D86y4zFPav.pc14jiS_OoiG.uLq8X443ojPAJSNddCQ1L_FYY7ZHnMjWhgV_ovIA--",
 	}
 }
 
 
-func (m mockGetUserInformation) GetCredentialInformation(ctx context.Context, session string) (users.User, error) {
+func (m mockGetUserInformation) GetCredentialInformation(ctx context.Context, session string) (entities.User, error) {
 	args := m.Called(ctx, session)
-	return args.Get(0).(users.User), args.Error(1)
+	return args.Get(0).(entities.User), args.Error(1)
 }
 
 func TestService_GetUserResourcesGames(t *testing.T) {
@@ -35,7 +35,7 @@ func TestService_GetUserResourcesGames(t *testing.T) {
 
 
 	svc := NewService(logger, mockUserInfo)
-	games, err := svc.GetUserResourcesGames(ctx, getUser())
+	games, err := svc.GetUserResourcesGames(ctx)
 	assert.Nil(t, err)
 	mockUserInfo.AssertExpectations(t)
 	assert.True(t, len(games.Games) > 0, "Length of games is not greater than 0")
