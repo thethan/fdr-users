@@ -15,13 +15,16 @@ import (
 	grpc_auth "github.com/grpc-ecosystem/go-grpc-middleware/auth"
 	"github.com/oklog/run"
 	"github.com/thethan/fdr-users/pkg/coordinator/transports"
+	"github.com/thethan/fdr-users/pkg/draft"
 	"github.com/thethan/fdr-users/pkg/draft/repositories"
+	draftTransports "github.com/thethan/fdr-users/pkg/draft/transports"
 	"github.com/thethan/fdr-users/pkg/league"
 	"github.com/thethan/fdr-users/pkg/mongo"
 	"github.com/thethan/fdr-users/pkg/yahoo"
 	"go.elastic.co/apm/module/apmgorilla"
 	"net/http"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	firebase2 "github.com/thethan/fdr-users/pkg/firebase"
@@ -89,7 +92,7 @@ func init() {
 	if addr := os.Getenv("SERVICE_ACCOUNT_FILE_LOCATION"); addr != "" {
 		DefaultConfig.ServiceAccountFileLocation = addr
 	} else {
-		fmt.Println(fmt.Sprintf("could not get service account location %s", ))
+		fmt.Println(fmt.Sprintf("could not get service account location %s"))
 		os.Exit(1)
 	}
 
@@ -145,7 +148,7 @@ func main() {
 
 	firestoreclient, firebaseauthclient := initializeAppDefault(ctx, DefaultConfig, logger)
 
-	repo := firebase2.NewFirebaseRepository(logger, firestoreclient)
+	repo := firebase2.NewFirebaseRepository(logger, firestoreclient, firebaseauthclient)
 	authRepo := firebase2.NewFirestoreAuthRepo(logger, firebaseauthclient)
 
 	authSvc := auth.NewAuthService(logger, &authRepo)
@@ -159,17 +162,20 @@ func main() {
 	}
 	mongoRepo := repositories.NewMongoRepository(logger, mongoClient, "fdr", "draft", "fdr_user", "roster")
 	importService := league.NewImportService(logger, yahooProvider, &mongoRepo)
-	coordinatorEndpoints := coordinator.NewEndpoints(logrusLogger, importService, authSvc.NewAuthMiddleware(&repo))
+	coordinatorEndpoints := coordinator.NewEndpoints(logrusLogger, importService, authSvc.NewAuthMiddleware())
 	_ = transports.NewServer(logger, logrusLogger, coordinatorEndpoints)
-	endpoints := users.NewEndpoints(logger, &repo, &repo, &importService, authSvc.NewAuthMiddleware(&repo), authSvc.ServerBefore)
+	endpoints := users.NewEndpoints(logger, &repo, &repo, &importService, authSvc.NewAuthMiddleware(), authSvc.ServerBefore)
 
-	router := mux.NewRouter()
-	apmgorilla.Instrument(router)
-	router = transports.NewHTTPServer(logrusLogger, router, coordinatorEndpoints, authSvc.ServerBefore)
+	ogGrouter := mux.NewRouter()
+	apmgorilla.Instrument(ogGrouter)
+	transports.NewHTTPServer(logrusLogger, ogGrouter, coordinatorEndpoints, authSvc.ServerBefore)
 
+	// draft
+	draftService := draft.NewService(logger, mongoRepo)
+	draftEndpoints := draft.NewEndpoints(logger, &draftService)
 
-
-	users.MakeHTTPHandler(endpoints, router, authSvc.ServerBefore)
+	users.MakeHTTPHandler(endpoints, ogGrouter, authSvc.ServerBefore)
+	draftTransports.MakeHTTPHandler(logger, draftEndpoints, ogGrouter, authSvc.ServerBefore)
 
 	// Mechanical domain.
 	errc := make(chan error)
@@ -180,13 +186,41 @@ func main() {
 	// Interrupt handler.
 	go handlers.InterruptHandler(errc)
 
+
+	_ = ogGrouter.Walk(func(route *mux.Route, router *mux.Router, ancestors []*mux.Route) error {
+		pathTemplate, err := route.GetPathTemplate()
+		if err == nil {
+			fmt.Println("ROUTE:", pathTemplate)
+		}
+		pathRegexp, err := route.GetPathRegexp()
+		if err == nil {
+			fmt.Println("Path regexp:", pathRegexp)
+		}
+		queriesTemplates, err := route.GetQueriesTemplates()
+		if err == nil {
+			fmt.Println("Queries templates:", strings.Join(queriesTemplates, ","))
+		}
+		queriesRegexps, err := route.GetQueriesRegexp()
+		if err == nil {
+			fmt.Println("Queries regexps:", strings.Join(queriesRegexps, ","))
+		}
+		methods, err := route.GetMethods()
+		if err == nil {
+			fmt.Println("Methods:", strings.Join(methods, ","))
+		}
+		fmt.Println()
+		return nil
+	})
+
 	// gRPC transport.
 	var g run.Group
 	{
 		g.Add(func() error {
 			ln, _ := net.Listen("tcp", DefaultConfig.HTTPAddr)
 
-			return http.Serve(ln, muxhandlers.CORS(muxhandlers.AllowedHeaders([]string{"X-Requested-With", "Content-Type", "Authorization"}), muxhandlers.AllowedMethods([]string{"GET", "POST", "PUT", "HEAD", "OPTIONS"}), muxhandlers.AllowedOrigins([]string{"*"}))(router))
+			return http.Serve(ln,
+				muxhandlers.CORS(muxhandlers.AllowedHeaders([]string{"X-Requested-With", "Content-Type", "Authorization"}),
+					muxhandlers.AllowedMethods([]string{"GET", "POST", "PUT", "HEAD", "OPTIONS"}), muxhandlers.AllowedOrigins([]string{"*"}))(ogGrouter))
 		}, func(err error) {
 			return
 		})
