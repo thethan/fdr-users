@@ -89,6 +89,12 @@ func MakeHTTPHandler(endpoints Endpoints, m *mux.Router, authServerBefore httptr
 		EncodeHTTPSaveCredentialByUserIDRequest,
 		serverOptions...,
 	))
+	m.Methods(http.MethodGet).Path("/info").Handler(httptransport.NewServer(
+		endpoints.GetUserLeagues,
+		DecodeHTTPSaveCredentialByUserIDRequest,
+		EncodeHTTPSaveCredentialByUserIDRequest,
+		serverOptionsAuth...,
+	))
 	return m
 }
 
@@ -112,7 +118,7 @@ func errorEncoder(_ context.Context, err error, w http.ResponseWriter) {
 			w.Header().Set(k, headerer.Headers().Get(k))
 		}
 	}
-	code := http.StatusInternalServerError
+	code := http.StatusBadRequest
 	if sc, ok := err.(httptransport.StatusCoder); ok {
 		code = sc.StatusCode()
 	}
@@ -299,7 +305,7 @@ type UserCredentialResponse struct {
 	Email        string `json:"email"`
 }
 
-func DecodeHTTPSaveCredentialByUserIDRequest(_ context.Context, r *http.Request) (interface{}, error) {
+func DecodeHTTPSaveCredentialByUserIDRequest(ctx context.Context, r *http.Request) (interface{}, error) {
 	defer r.Body.Close()
 	var req UserCredentialRequest
 	buf, err := ioutil.ReadAll(r.Body)

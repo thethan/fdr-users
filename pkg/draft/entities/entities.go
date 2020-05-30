@@ -26,15 +26,17 @@ type LeagueGroup struct {
 }
 
 type League struct {
-	LeagueKey      string             `bson:"_id" json:"id"`
+	LeagueKey      string             `bson:"league_key" json:"id"`
 	Name           string             `bson:"name" json:"name"`
 	LeagueID       int                `bson:"league_id" json:"league_id"`
 	LeagueGroup    primitive.ObjectID `bson:"league_group_id" json:"league_group"`
-	PreviousLeague *int               `bson:"previous_league_id" json:"previous_league_id"`
+	PreviousLeague *string            `bson:"previous_league_id" json:"previous_league_id"`
 	Settings       *LeagueSettings    `bson:"settings" json:"settings" ` // year in which settings are for
-	//DraftResults   *yahoo.LeagueResourcesDraftResults `bson:"draft_results"`// This is results by Year
-	Teams []Team `bson:"teams" json:"teams"` // season is the key
-	Game  Game   `json:"game" bson:"game"`   // season is the key
+	Teams          []Team             `bson:"teams" json:"teams"`        // season is the key
+	Game           Game               `json:"game" bson:"game"`          // season is the key
+	DraftOrder     []string           `json:"-" bson:"draft_order,omitempty"`
+	TeamDraftOrder []Team             `json:"draft_order,omitempty" bson:"-"`
+	DraftStarted   bool               `json:"draft_started,omitempty" bson:"draft_started,omitempty"`
 }
 
 func (l *League) GetParentID() *int {

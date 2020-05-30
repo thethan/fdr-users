@@ -7,7 +7,6 @@ import (
 	"github.com/go-kit/kit/endpoint"
 	"github.com/go-kit/kit/log"
 	"github.com/thethan/fdr-users/pkg/firebase"
-	"github.com/thethan/fdr-users/pkg/users"
 	"go.elastic.co/apm"
 	"net/http"
 	"strings"
@@ -74,15 +73,19 @@ const FirebaseToken string = "firebase_token"
 const BearerToken string = "bearer"
 
 func (a AuthService) ServerBefore(ctx context.Context, req *http.Request) context.Context {
+	span, ctx :=apm.StartSpan(ctx, "authService", "ServerBefore")
+	defer span.End()
 	authHeader := req.Header.Get("Authorization")
 	authHeader = strings.Replace(authHeader, "Bearer ", "", 1)
 	ctx = context.WithValue(ctx, BearerToken, authHeader)
 	return ctx
 }
 
-func (a AuthService) NewAuthMiddleware(repo users.GetUserInfo) endpoint.Middleware {
+func (a AuthService) NewAuthMiddleware() endpoint.Middleware {
 	return func(next endpoint.Endpoint) endpoint.Endpoint {
 		return func(ctx context.Context, request interface{}) (interface{}, error) {
+			span, ctx :=apm.StartSpan(ctx, "NewAuthMiddleware", "middleware")
+			defer span.End()
 
 			tokenIface := ctx.Value(BearerToken)
 			tokenString := tokenIface.(string)

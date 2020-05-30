@@ -3,63 +3,42 @@ package draft
 import (
 	"context"
 	"github.com/go-kit/kit/log"
-	pb "github.com/thethan/fdr_proto"
+	"github.com/go-kit/kit/log/level"
+	"github.com/thethan/fdr-users/pkg/draft/entities"
+	"go.elastic.co/apm"
 )
 
-func NewService(logger log.Logger, repository CreateRepository, ) Service {
-	return Service{logger: logger, createRepository: repository}
+func NewService(logger log.Logger, repository draftRepository, ) Service {
+	return Service{logger: logger, draftRepo: repository}
 }
 
-
-type Draft struct {
-	ID            string
-	Year          string
-	League        string
-	DraftType     string
-	Users         []User
-	Commissioners []User
-	Roster
-}
-
-type Roster struct {
-	Position  string
-	Starting  int32
-	MaxNumber int32
-}
-
-type User struct {
-	ID    string
-	Name  string
-	Email string
-}
-
-type CreateRepository interface {
-	CreateDraft(context.Context, pb.Season) (pb.Season, error)
-}
-
-type UpdateRepository interface {
-	UpdateDraft(context.Context, pb.Season) (pb.Season, error)
-}
-
-type ListUserDraftRepository interface {
-	ListUserDrafts(ctx context.Context, user pb.User) ([]pb.Season, error)
+type draftRepository interface {
+	GetDraftResults(ctx context.Context, leagueKey string) ([]entities.DraftResult, error)
+	GetLeague(ctx context.Context, leagueKey string) (entities.League, error)
 }
 
 type Service struct {
-	logger                  log.Logger
-	createRepository        CreateRepository
-	updateRepository        UpdateRepository
-	listUserDraftRepository ListUserDraftRepository
+	logger    log.Logger
+	draftRepo draftRepository
 }
 
-func (service *Service) CreateDraft(ctx context.Context, draft pb.Season) (pb.Season, error) {
-	return service.createRepository.CreateDraft(ctx, draft)
-}
+func (service *Service) ListDraftResults(ctx context.Context, leagueKey string) (*entities.League, []entities.DraftResult, error) {
+	span, ctx := apm.StartSpan(ctx, "ListDraftResults", "service")
+	defer func() {
+		span.End()
+	}()
 
-func (service *Service) List(ctx context.Context, user pb.User) ([]pb.Season, error) {
-	return service.listUserDraftRepository.ListUserDrafts(ctx, user)
-}
+	league, err := service.draftRepo.GetLeague(ctx, leagueKey)
+	if err != nil {
+		level.Error(service.logger).Log("message", "could not get league", "error", err)
+		return nil, nil, err
+	}
+	results, err := service.draftRepo.GetDraftResults(ctx, leagueKey)
+	if err != nil {
+		level.Error(service.logger).Log("message", "could not get draft results", "error", err)
 
-func (service *Service) UpdateDraft(ctx context.Context, draft pb.Season) (pb.Season, error) {
-	return service.updateRepository.UpdateDraft(ctx, draft)
+		return nil, nil, err
+	}
+
+	return &league, results, err
 }

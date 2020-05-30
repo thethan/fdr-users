@@ -4,12 +4,16 @@ import (
 	"context"
 	"errors"
 	firebaseAuth "firebase.google.com/go/auth"
+	"fmt"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/thethan/fdr-users/pkg/auth"
 	"github.com/thethan/fdr-users/pkg/league"
 	"github.com/thethan/fdr-users/pkg/users/entities"
 	"github.com/thethan/fdr-users/pkg/yahoo"
 	"go.elastic.co/apm"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"time"
 
 	pb "github.com/thethan/fdr_proto"
@@ -177,5 +181,56 @@ func (s usersService) SaveYahooCredential(ctx context.Context, in *CredentialReq
 			ExpiresIn:    int32(time.Now().Sub(user.ExpiresAt).Seconds()),
 		},
 	}
+	return &resp, nil
+}
+
+func (s usersService) GetUsersLeagues(ctx context.Context, in *UserCredentialRequest) (*UserCredentialResponse, error) {
+	span, ctx := apm.StartSpan(ctx, "GetUsersLeagues", "handlers.service")
+	defer span.End()
+
+	var resp UserCredentialResponse
+	tokenInterface := ctx.Value(auth.FirebaseToken)
+
+	token, ok := tokenInterface.(*firebaseAuth.Token)
+	if !ok {
+		return nil, status.Errorf(codes.Unauthenticated, "invalid auth token: %v", ok)
+	}
+
+	var yahooID string
+	// get token from uuid
+	for key, identifiers := range token.Firebase.Identities {
+		if key == "yahoo.com" {
+			fmt.Printf("%v", identifiers)
+			yahooID, ok = identifiers.([]interface{})[0].(string)
+			if !ok {
+				return nil, errors.New("could not get authenticator token")
+			}
+		}
+	}
+
+	if yahooID == "" {
+		return nil, errors.New("could not get authenticator token")
+	}
+
+	yahooService := yahoo.NewService(s.logger, NoopGetUserInformation{})
+	importer := s.importer.NewImporterWithService(yahooService)
+
+	leagueGroups, err := importer.GetUserLeagues(ctx, yahooID)
+	if err != nil {
+		level.Error(s.logger).Log("message", "could not get user leagues", "error", err, "guid", in.Guid)
+	}
+
+	if err != nil {
+		level.Error(s.logger).Log("message", "could not get user leagues", "error", err, "guid", in.Guid)
+	}
+
+	resp = UserCredentialResponse{
+		UID: in.UID,
+		//Session:      in.AccessToken,
+		//RefreshToken: user.RefreshToken,
+		//Guid:         user.GUID,
+		Leagues: leagueGroups,
+	}
+
 	return &resp, nil
 }

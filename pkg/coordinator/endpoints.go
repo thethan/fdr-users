@@ -21,7 +21,7 @@ func NewEndpoints(logger logrus.FieldLogger, service league.Importer, authMiddle
 	return Endpoints{
 		logrus:            logger,
 		ImportUserLeagues: authMiddleWare(makeImportUserLeagues(logger, service)),
-		ImportGamePlayers:     authMiddleWare(makeImportGamePlayers(logger, service)),
+		ImportGamePlayers: authMiddleWare(makeImportGamePlayers(logger, service)),
 	}
 }
 
@@ -30,7 +30,13 @@ func makeImportUserLeagues(logger logrus.FieldLogger, service league.Importer) e
 		span, ctx := apm.StartSpan(ctx, "endpoint.importUserLeagues", "custom")
 		defer span.End()
 
-		return service.ImportLeagueFromUser(ctx)
+		//req, ok := request.(ImportGamePlayersRequest)
+		//if !ok {
+		//	return nil, errors.New("bad request")
+		//}
+
+		_, err = service.ImportLeagueFromUser(ctx)
+		return nil, err
 	}
 }
 

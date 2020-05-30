@@ -2,6 +2,7 @@ package league
 
 import (
 	"context"
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/thethan/fdr-users/pkg/draft/entities"
@@ -11,12 +12,19 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 type SaveLeagueInfoIFace interface {
+	GetLeague(ctx context.Context, playerKeys string) (entities.League, error)
+	GetPlayers(ctx context.Context, playerKeys []string) ([]entities.PlayerSeason, error)
+	GetTeamsForLeague(ctx context.Context, leagueKey string) ([]entities.Team, error)
+	GetTeamsForManagers(ctx context.Context, guid string) ([]entities.League, error)
+	SaveDraftOrder(ctx context.Context, leagueKey string, teamOrder []string) error
+	SaveDraftResult(ctx context.Context, draftResult entities.DraftResult) error
+	SaveDraftResults(ctx context.Context, draftResult []entities.DraftResult) error
 	SaveLeague(context.Context, *entities.LeagueGroup) (*entities.LeagueGroup, error)
 	SavePlayers(context.Context, []entities.PlayerSeason) ([]entities.PlayerSeason, error)
-	GetTeamsForManagers(ctx context.Context, guid string) ([]entities.League, error)
 }
 
 type ImportYahooData interface {
@@ -155,13 +163,13 @@ func (i *Importer) GetUserLeagues(ctx context.Context, guid string) ([]*entities
 		level.Error(i.logger).Log("message", "could not get user teams", "error", err, "guid", guid)
 	}
 
-	for i := len(leagues) -1; i >= 0; i-- {
+	for i := len(leagues) - 1; i >= 0; i-- {
 		dto.addLeague(leagues[i])
 		parentLeagueID := 0
 		ids := strings.Split(leagues[i].Settings.Renew, "_")
 		if len(ids) > 1 {
 			parentLeagueID, _ = strconv.Atoi(ids[1])
-			leagues[i].PreviousLeague = &parentLeagueID
+			leagues[i].PreviousLeague = aws.String(ids[0] + ".l." + ids[1])
 		}
 
 		// check if parentID exists
@@ -191,7 +199,7 @@ func (i *Importer) ImportFromUser(ctx context.Context, userGames *yahoo.UserReso
 				ids := strings.Split(league.Settings.Renew, "_")
 				if len(ids) > 1 {
 					parentLeagueID, _ = strconv.Atoi(ids[1])
-					league.PreviousLeague = &parentLeagueID
+					league.PreviousLeague = aws.String(ids[0] + ".l." + ids[1])
 				}
 
 				// check if parentID exists
@@ -287,6 +295,119 @@ func (i *Importer) getLeague(ctx context.Context, game entities.Game, leagueRes 
 	return nil
 }
 
+func (i *Importer) ImportDraftResultsForUser(ctx context.Context, guid string) error {
+	span, ctx := apm.StartSpan(ctx, "ImportDraftResultsForUser", "service")
+	defer func() {
+		span.End()
+	}()
+
+	leagues, err := i.repo.GetTeamsForManagers(ctx, guid)
+	if err != nil {
+		return err
+	}
+	for _, league := range leagues {
+		_, err = i.ImportDraftResults(ctx, league.LeagueKey)
+		level.Error(i.logger).Log("message", "error in importing draft results", "err", err, "league_key", league.LeagueKey)
+	}
+	return nil
+}
+
+func (i *Importer) ImportDraftResults(ctx context.Context, leagueKey string) (entities.Draft, error) {
+	span, ctx := apm.StartSpan(ctx, "ImportDraftResults", "service")
+	defer func() {
+		span.End()
+	}()
+
+	//teams := make([]entities.Team, 0, 20)
+	teamKeyToTeamMap := make(map[string]entities.Team, 0)
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	var teamError error
+	go func() {
+		defer wg.Done()
+		teams, teamError := i.repo.GetTeamsForLeague(ctx, leagueKey)
+		if teamError != nil {
+			level.Error(i.logger).Log("message", "error in getting teams", "err", teamError, "league_key", leagueKey)
+			return
+		}
+		teamKeyToTeamMap = make(map[string]entities.Team, len(teams))
+		for _, team := range teams {
+			teamKeyToTeamMap[team.TeamKey] = team
+		}
+	}()
+
+	// string is yahoo's guid
+	//var userTeams map[string]Team
+	res, err := i.yahooService.GetLeagueResourcesDraftResults(ctx, leagueKey)
+	if err != nil {
+		level.Error(i.logger).Log("message", "error getting draft results")
+		return entities.Draft{}, err
+	}
+
+	results := res.League.DraftResults.DraftResult
+	wg.Wait()
+	if teamError != nil {
+		level.Error(i.logger).Log("error ", err, "message", "error returned from getting teams")
+		return entities.Draft{}, err
+	}
+	//playerKeys := make([]string, len(results))
+	//playerKeyToDraftRes := make(map[string]int, len(results)) // playerKey to draft index
+	//draftResultToTeamKey := make(map[int]string, len(results))
+	//
+	//// get all teams with league keys
+	//// find leagues
+	//players, err := i.repo.GetPlayers(ctx, playerKeys)
+	// find teams
+	draft := entities.Draft{
+		ID:           leagueKey,
+		DraftResults: nil,
+	}
+
+	//err = i.repo.SaveDraft(ctx, draft)
+	//if err != nil {
+	//	level.Error(i.logger).Log("message", "error in saving draft", "error", err)
+	//	return draft, err
+	//}
+
+	// get draft Order
+	teamOrder := make([]string, res.League.NumTeams)
+	teamOrderIndex := 0
+	draftRests := make([]entities.DraftResult, len(results))
+	for idx, dr := range results {
+		playerIDs := strings.Split(dr.PlayerKey, ".p.")
+
+		playerID := 0
+		if len(playerIDs) ==2 {
+			playerID, err = strconv.Atoi(playerIDs[1])
+		}
+		result := entities.DraftResult{
+			UserGUID:  teamKeyToTeamMap[dr.TeamKey].Manager[0].Guid,
+			PlayerKey: dr.PlayerKey,
+			PlayerID:  playerID,
+			Team:      dr.TeamKey,
+			LeagueKey: draft.ID,
+			Round:     dr.Round,
+			Pick:      dr.Pick,
+			Timestamp: time.Now(),
+		}
+		if result.Round == 1 {
+			teamOrder[teamOrderIndex] = dr.TeamKey
+			teamOrderIndex++
+		}
+		draftRests[idx] = result
+		err = i.repo.SaveDraftResult(ctx, result)
+		if err != nil {
+			level.Error(i.logger).Log("message", "error in draft result saving", "error", err)
+			return draft, err
+		}
+
+	}
+	err = i.repo.SaveDraftOrder(ctx, draft.ID, teamOrder)
+
+	//err = i.repo.SaveDraftResult(ctx, draftRests)
+	return draft, err
+}
+
 func (i *Importer) ImportTeamsFromUser(ctx context.Context) {
 	res, err := i.yahooService.GetUserResourcesGameTeams(ctx)
 	if err != nil {
@@ -300,7 +421,6 @@ func (i *Importer) ImportTeamsFromUser(ctx context.Context) {
 		// add game to dto
 		game := transformGameResponseToGame(gameRes)
 		dto.games = append(dto.games, &game)
-
 	}
 
 }

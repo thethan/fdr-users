@@ -3,58 +3,72 @@ package draft
 import (
 	"context"
 	"errors"
-	"fmt"
 	"github.com/go-kit/kit/endpoint"
 	"github.com/go-kit/kit/log"
-	pb "github.com/thethan/fdr_proto"
+	"github.com/go-kit/kit/log/level"
+	"github.com/thethan/fdr-users/pkg/draft/entities"
+	"go.elastic.co/apm"
 )
 
 type Endpoints struct {
-	logger  log.Logger
-	service *Service
-	Create  endpoint.Endpoint
-	List    endpoint.Endpoint
-	Update  endpoint.Endpoint
+	logger         log.Logger
+	service        *Service
+	ImportDraft    endpoint.Endpoint
+	GetLeagueDraft endpoint.Endpoint
 }
 
 func NewEndpoints(logger log.Logger, service *Service) Endpoints {
 	e := Endpoints{
-		logger: logger,
-		Create: makeCreateEndpoint(logger, service),
-		List:   makeListEndpoint(logger, service),
-		Update: makeUpdateEndpoint(logger, service),
+		logger:         logger,
+		ImportDraft:    makeImportDraft(logger, service),
+		GetLeagueDraft: makeGetDraftInfo(logger, service),
 	}
 
 	return e
 }
 
-func makeCreateEndpoint(logger log.Logger, service *Service) endpoint.Endpoint {
+func makeImportDraft(logger log.Logger, service *Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		fmt.Printf("%+v", request)
-		req, ok := request.(*pb.CreateDraftRequest)
-		if !ok {
-			return nil, errors.New("could not get season from request")
-		}
-		return service.CreateDraft(ctx, *req.Season)
+		span, ctx := apm.StartSpan(ctx, "ImportDraft", "endpoint")
+		defer span.End()
+
+		return nil, nil
 	}
 }
 
-func makeListEndpoint(logger log.Logger, service *Service) endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		season, ok := request.(*pb.Season)
-		if !ok {
-			return nil, errors.New("could not get season")
-		}
-		return service.List(ctx, *season.Users[0])
-	}
+type DraftResultResponse struct {
+	League       *entities.League       `json:"league"`
+	DraftResults []entities.DraftResult `json:"draft_results"`
 }
 
-func makeUpdateEndpoint(logger log.Logger, service *Service) endpoint.Endpoint {
+type LeagueDraftRequest struct {
+	LeagueKey string
+}
+
+func makeGetDraftInfo(logger log.Logger, service *Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		season, ok := request.(*pb.Season)
+		span, ctx := apm.StartSpan(ctx, "GetDraftInfo", "endpoint")
+		defer span.End()
+
+		req, ok := request.(*LeagueDraftRequest)
 		if !ok {
-			return nil, errors.New("could not get season")
+			level.Error(logger).Log("message", "could not get request")
+			return nil, errors.New("bad request for get draft")
 		}
-		return service.UpdateDraft(ctx, *season)
+
+		league, results, err := service.ListDraftResults(ctx, req.LeagueKey)
+		if err != nil{
+			return nil, err
+		}
+		teamKeyToIdx := make(map[string]int, len(league.Teams))
+		for idx := range league.Teams {
+			teamKeyToIdx[league.Teams[idx].TeamKey] = idx
+		}
+		teams := make([]entities.Team, len(league.Teams))
+		for idx, teamKey := range league.DraftOrder {
+			teams[idx] = league.Teams[teamKeyToIdx[teamKey]]
+		}
+		league.TeamDraftOrder = teams
+		return &DraftResultResponse{DraftResults: results, League: league}, err
 	}
 }

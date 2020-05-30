@@ -386,7 +386,7 @@ type PlayerStats struct {
 	Stats        []PlayerStat `xml:"stats>stat"`
 }
 type PlayerStat struct {
-	StatID int `xml:"stat_id"`
+	StatID int     `xml:"stat_id"`
 	Value  float32 `xml:"value"`
 }
 
@@ -1303,7 +1303,7 @@ func (s *Service) GetLeagueResourcesSettings(ctx context.Context, leagueKey stri
 	//positions := make([]RosterPosition, len(yahooPositions))
 	//for idx, val := range yahooPositions {
 	//	pos := RosterPosition{
-	//		Position:     val.Position,
+	//		Pick:     val.Pick,
 	//		PositionType: val.PositionType,
 	//		Count:        val.Count,
 	//	}
@@ -1827,7 +1827,7 @@ type LeagueResourcesDraftResultsResponse struct {
 		LogoURL               string `xml:"logo_url"`
 		Password              string `xml:"password"`
 		DraftStatus           string `xml:"draft_status"`
-		NumTeams              string `xml:"num_teams"`
+		NumTeams              int    `xml:"num_teams"`
 		EditKey               string `xml:"edit_key"`
 		WeeklyDeadline        string `xml:"weekly_deadline"`
 		LeagueUpdateTimestamp string `xml:"league_update_timestamp"`
@@ -1853,8 +1853,8 @@ type LeagueResourcesDraftResultsResponse struct {
 			Count       string `xml:"count,attr"`
 			DraftResult []struct {
 				Text      string `xml:",chardata"`
-				Pick      string `xml:"pick"`
-				Round     string `xml:"round"`
+				Pick      int    `xml:"pick"`
+				Round     int    `xml:"round"`
 				TeamKey   string `xml:"team_key"`
 				PlayerKey string `xml:"player_key"`
 			} `xml:"draft_result"`
@@ -1862,17 +1862,29 @@ type LeagueResourcesDraftResultsResponse struct {
 	} `xml:"league"`
 }
 
-func (s *Service) GetLeagueResourcesDraftResults(leagueKey string) (*LeagueResourcesDraftResults, error) {
+func (s *Service) GetLeagueResourcesDraftResults(ctx context.Context, leagueKey string) (*LeagueResourcesDraftResultsResponse, error) {
 	url := fmt.Sprintf("https://fantasysports.yahooapis.com/fantasy/v2/league/%s/draftresults", leagueKey)
-	res, err := s.Get(url)
+	res, err := s.get(ctx, url)
 
+	v := LeagueResourcesDraftResultsResponse{}
 	if err != nil {
 		return nil, err
 	}
 
 	defer res.Body.Close()
 
-	return nil, errors.New("not implemented")
+	bytes, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+	// transform response to games
+	err = xml.Unmarshal(bytes, &v)
+	if err != nil {
+		fmt.Printf("error: %v", err)
+		return nil, err
+	}
+
+	return &v, nil
 }
 
 type LeagueResourcesTransaction struct {

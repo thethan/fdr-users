@@ -16,7 +16,7 @@ func NewMongoDBClient(user, password, host string) (*mongo.Client, error) {
 	//	fmt.Sprintf("mongodb+srv://%s:%s@%s", user, password, host),
 	//), options.Client().SetMonitor(apmmongo.CommandMonitor()), )
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI(
-		fmt.Sprintf("mongodb://root:asdf@localhost:27018/fdr?authSource=admin&w=majority",),
+		fmt.Sprintf("mongodb://root:For3v3r!nBlu3J3ans@localhost:27018/fdr?authSource=admin&w=majority",),
 	), options.Client().SetMonitor(apmmongo.CommandMonitor()), )
 
 

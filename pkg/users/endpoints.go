@@ -40,6 +40,7 @@ type Endpoints struct {
 	CredentialEndpoint     endpoint.Endpoint
 	SaveCredentialEndpoint endpoint.Endpoint
 	SaveUserInfoEndpoint   endpoint.Endpoint
+	GetUserLeagues         endpoint.Endpoint
 	logger                 log.Logger
 }
 
@@ -61,6 +62,7 @@ func NewEndpoints(logger log.Logger, user GetUserInfo, saveInfo SaveUserInfo, im
 		getCredentialsEndpoint  = MakeCredentialsEndpoint(&service, user)
 		saveCredentialsEndpoint = authMiddleware(MakeSaveCredentialsEndpoint(&service))
 		saveUserInfoEndpoint    = MakeSaveInformationsEndpoint(&service)
+		getUserLeagueEndpoint   = authMiddleware(MakeGetUserLeaguesEndpoint(&service))
 	)
 
 	endpoints := Endpoints{
@@ -71,6 +73,7 @@ func NewEndpoints(logger log.Logger, user GetUserInfo, saveInfo SaveUserInfo, im
 		CredentialEndpoint:     getCredentialsEndpoint,
 		SaveCredentialEndpoint: saveCredentialsEndpoint,
 		SaveUserInfoEndpoint:   saveUserInfoEndpoint,
+		GetUserLeagues:         getUserLeagueEndpoint,
 	}
 
 	// Wrap selected Endpoints with middlewares. See handlers/middlewares.go
@@ -153,9 +156,23 @@ func MakeSaveInformationsEndpoint(s *usersService) endpoint.Endpoint {
 		span, ctx := apm.StartSpan(ctx, "SaveInformationEndpoint", "endpoint")
 		defer span.End()
 
-
 		req := request.(*UserCredentialRequest)
 		v, err := s.SaveFromUserID(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		return v, nil
+	}
+
+}
+
+func MakeGetUserLeaguesEndpoint(s *usersService) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		span, ctx := apm.StartSpan(ctx, "GetUserLeaguesEndpoint", "endpoint")
+		defer span.End()
+
+		req := request.(*UserCredentialRequest)
+		v, err := s.GetUsersLeagues(ctx, req)
 		if err != nil {
 			return nil, err
 		}

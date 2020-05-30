@@ -38,6 +38,13 @@ func NewHTTPServer(fieldLogger logrus.FieldLogger, m *mux.Router, endpoints coor
 		EncodeHTTPDecodeImportGamePlayersRequest(fieldLogger),
 		options...,
 	))
+
+	m.Methods("POST").Path("/import/leagues").Handler(httptransport.NewServer(
+		endpoints.ImportGamePlayers,
+		DecodeHTTPImportGamePlayersRequest(fieldLogger),
+		EncodeHTTPDecodeImportGamePlayersRequest(fieldLogger),
+		options...,
+	))
 	return m
 }
 

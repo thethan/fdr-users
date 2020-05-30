@@ -19,6 +19,7 @@ import (
 
 const database string = "fdr"
 const leaguesCollection string = "leagues"
+const draftsCollection string = "draft_results"
 const playersBySeason string = "players"
 const playersByWeek string = "players"
 
@@ -78,9 +79,221 @@ func NewMongoRepository(logger log.Logger, client *mongo.Client, database string
 		rosterCollection:       rosterCollection}
 }
 
+func (m MongoRepository) GetDraftResults(ctx context.Context, leagueKey string) ([]entities.DraftResult, error) {
+	span, ctx := apm.StartSpan(ctx, "GetDraftResults", "repository.Mongo")
+	defer span.End()
+
+	pipeline := mongo.Pipeline{
+		bson.D{{"$match", bson.M{"league_key": leagueKey}}},
+		bson.D{{"$lookup", bson.M{"from": playersBySeason, "localField": "player_key", "foreignField": "_id", "as": "player"}}},
+	}
+	collection := m.client.Database(database).Collection(draftsCollection)
+	findOptions := &options.AggregateOptions{}
+	cursor, err := collection.Aggregate(ctx, pipeline, findOptions)
+	if err != nil {
+		level.Error(m.logger).Log("message", "could not get draft results", "error", err, "league_key", leagueKey)
+		return nil, err
+	}
+
+	var bsonResults []bson.M
+	err = cursor.All(ctx, &bsonResults)
+	if err != nil {
+		return nil, err
+	}
+	draftResults := make([]entities.DraftResult, len(bsonResults))
+	for idx, bsonM := range bsonResults {
+		var draftResult entities.DraftResult
+		bsonBytes, err := bson.Marshal(&bsonM)
+		if err != nil {
+			return nil, err
+		}
+
+		err = bson.Unmarshal(bsonBytes, &draftResult)
+		if err != nil {
+			return nil, err
+		}
+		draftResults[idx] = draftResult
+	}
+
+	return draftResults, nil
+}
+
+// {"teams.manager":{ $elemMatch: {"guid":"DPPQCXCRV75Z2LKJW5YRC7RAYM"}}}
+func (m MongoRepository) SaveDraftResult(ctx context.Context, draftResult entities.DraftResult) error {
+	span, ctx := apm.StartSpan(ctx, "SaveDraftResult", "repository.Mongo")
+	defer span.End()
+
+	collection := m.client.Database(database).Collection(draftsCollection)
+	draftDBytes, err := bson.Marshal(&draftResult)
+	var draftD bson.D
+	err = bson.Unmarshal(draftDBytes, &draftD)
+	if err != nil {
+		level.Error(m.logger).Log("error", err, "could not make query", "guid", draftResult.UserGUID)
+
+	}
+	_, err = collection.UpdateOne(ctx, bson.M{"league_key": draftResult.LeagueKey, "player_key": draftResult.PlayerKey}, bson.D{{"$set", draftD}}, &options.UpdateOptions{
+		Upsert: aws.Bool(true),
+	})
+
+	if err != nil {
+		level.Error(m.logger).Log("error", err, "could not execute query", "guid", draftResult.UserGUID, "query", draftD)
+		return err
+	}
+	return nil
+}
+
+// {"teams.manager":{ $elemMatch: {"guid":"DPPQCXCRV75Z2LKJW5YRC7RAYM"}}}
+func (m MongoRepository) SaveDraftOrder(ctx context.Context, leagueKey string, teamOrder []string) error {
+	span, ctx := apm.StartSpan(ctx, "SaveDraftOrder", "repository.Mongo")
+	defer span.End()
+
+	collection := m.client.Database(database).Collection(leaguesCollection)
+
+	res, err := collection.UpdateOne(ctx, bson.M{"league_key": leagueKey}, bson.M{"$set": bson.M{"draft_order": teamOrder}})
+	if err != nil {
+		level.Error(m.logger).Log("error", err, "could not make query", "league_key", leagueKey)
+		return err
+	}
+
+	level.Debug(m.logger).Log("message", "updated matched count", "league_key", leagueKey, "matched", res.MatchedCount, "modified", res.ModifiedCount)
+	return err
+}
+
+// {"teams.manager":{ $elemMatch: {"guid":"DPPQCXCRV75Z2LKJW5YRC7RAYM"}}}
+func (m MongoRepository) SaveLeagueLeague(ctx context.Context, league entities.League) (entities.League, error) {
+	span, ctx := apm.StartSpan(ctx, "SaveLeagueLeague", "repository.Mongo")
+	defer span.End()
+
+	collection := m.client.Database(database).Collection(leaguesCollection)
+	var bsonMap, updateMap bson.M
+	queryString := fmt.Sprintf(`{"league_key": "%s"}`, league.LeagueKey)
+	err := json.Unmarshal([]byte(queryString), &bsonMap)
+	if err != nil {
+		level.Error(m.logger).Log("error", err, "could not make query", "league_key", league.LeagueKey, "query", queryString)
+		return entities.League{}, err
+	}
+
+	res, err := collection.UpdateOne(ctx, updateMap, bson.M{"$set": bson.M{"draft_started": league.DraftStarted}})
+	//res, err := collection.UpdateOne(ctx, updateMap, league, &options.UpdateOptions{
+	//BypassDocumentValidation: aws.Bool(true),
+	//})
+
+	if err != nil {
+		level.Error(m.logger).Log("error", err, "could not make query", "league_key", league.LeagueKey, "query", queryString)
+		return entities.League{}, err
+	}
+
+	level.Debug(m.logger).Log("message", "updated matched count", "league_key", league.LeagueKey, "query", queryString, "matched", res.MatchedCount, "modified", res.ModifiedCount)
+	return league, err
+}
+
+func (m MongoRepository) GetLeague(ctx context.Context, leagueKey string) (entities.League, error) {
+	span, ctx := apm.StartSpan(ctx, "GetLeague", "repository.Mongo")
+	defer span.End()
+
+	collection := m.client.Database(database).Collection(leaguesCollection)
+	var findQuert bson.M
+	queryString := fmt.Sprintf(`{"league_key": "%s"}`, leagueKey)
+	err := json.Unmarshal([]byte(queryString), &findQuert)
+	if err != nil {
+		level.Error(m.logger).Log("error", err, "could not make query", "league_key", leagueKey, "query", queryString)
+		return entities.League{}, err
+	}
+
+	res := collection.FindOne(ctx, findQuert)
+	if err != nil {
+		level.Error(m.logger).Log("error", err, "could not make query", "league_key", leagueKey, "query", queryString)
+		return entities.League{}, err
+	}
+	var league entities.League
+	err = res.Decode(&league)
+	return league, err
+}
+
+func (m MongoRepository) GetTeamsForLeague(ctx context.Context, leagueKey string) ([]entities.Team, error) {
+
+	span, ctx := apm.StartSpan(ctx, "GetTeamsForManagers", "repository.Mongo")
+	defer span.End()
+
+	collection := m.client.Database(database).Collection(leaguesCollection)
+
+	// get newest to oldest
+	// will have to flip at some place
+	cursor := collection.FindOne(ctx, bson.M{"league_key": leagueKey})
+	if cursor.Err() != nil {
+		level.Error(m.logger).Log("message", "cursor error", "league_key", leagueKey, "error", cursor.Err())
+		return []entities.Team{}, cursor.Err()
+	}
+	var league entities.League
+	err := cursor.Decode(&league)
+
+	if err != nil {
+		level.Error(m.logger).Log("message", "could not marshal league", "league_key", leagueKey, "error", err)
+		return []entities.Team{}, err
+	}
+
+	return league.Teams, nil
+}
+
+// {"teams.manager":{ $elemMatch: {"guid":"DPPQCXCRV75Z2LKJW5YRC7RAYM"}}}
+func (m MongoRepository) GetPlayers(ctx context.Context, playerKeys []string) ([]entities.PlayerSeason, error) {
+	span, ctx := apm.StartSpan(ctx, "GetPlayers", "repository.Mongo")
+	defer span.End()
+
+	collection := m.client.Database(database).Collection(playersBySeason)
+	result := bson.A{}
+	for _, e := range playerKeys {
+		result = append(result, e)
+	}
+	query := bson.M{"_id": bson.M{"$in":
+	result,
+	},
+	}
+
+	cursor, err := collection.Find(ctx, query)
+	if err != nil {
+		level.Error(m.logger).Log("error", err, "could not make query")
+		return []entities.PlayerSeason{}, err
+	}
+
+	players := make([]entities.PlayerSeason, len(playerKeys))
+	var i int
+	for cursor.Next(ctx) {
+		var player entities.PlayerSeason
+
+		err = cursor.Decode(&player)
+		if err != nil {
+			level.Error(m.logger).Log("message", "could not marshal league", "error", err)
+			return players, err
+		}
+		players[i] = player
+		i++
+	}
+
+	return players, nil
+}
+
+// {"teams.manager":{ $elemMatch: {"guid":"DPPQCXCRV75Z2LKJW5YRC7RAYM"}}}
+func (m MongoRepository) SaveDraftResults(ctx context.Context, draftResults []entities.DraftResult) error {
+	span, ctx := apm.StartSpan(ctx, "SaveDraft", "repository.Mongo")
+	defer span.End()
+
+	collection := m.client.Database(database).Collection(draftsCollection)
+
+	_, err := collection.UpdateMany(ctx, bson.M{"league_key": draftResults[0].LeagueKey}, draftResults, &options.UpdateOptions{
+		Upsert: aws.Bool(true),
+	})
+
+	if err != nil {
+		level.Error(m.logger).Log("error", err, "could not make query", "league_key", draftResults[0].LeagueKey)
+		return err
+	}
+	return nil
+}
+
 // {"teams.manager":{ $elemMatch: {"guid":"DPPQCXCRV75Z2LKJW5YRC7RAYM"}}}
 func (m MongoRepository) GetTeamsForManagers(ctx context.Context, guid string) ([]entities.League, error) {
-	span, ctx := apm.StartSpan(ctx, "CreateLeague", "repository.Mongo")
+	span, ctx := apm.StartSpan(ctx, "GetTeamsForManagers", "repository.Mongo")
 	defer span.End()
 
 	collection := m.client.Database(database).Collection(leaguesCollection)
@@ -91,7 +304,6 @@ func (m MongoRepository) GetTeamsForManagers(ctx context.Context, guid string) (
 		level.Error(m.logger).Log("error", err, "could not make query", "guid", guid, "query", queryString)
 		return []entities.League{}, err
 	}
-
 
 	findOptions := options.Find()
 	// get newest to oldest
@@ -117,7 +329,6 @@ func (m MongoRepository) GetTeamsForManagers(ctx context.Context, guid string) (
 	}
 
 	return leagues, nil
-
 }
 
 func (m *MongoRepository) SaveLeague(ctx context.Context, leagueGroupd *entities.LeagueGroup) (*entities.LeagueGroup, error) {
@@ -144,16 +355,15 @@ func (m *MongoRepository) SaveLeague(ctx context.Context, leagueGroupd *entities
 	for _, league := range leagueGroupd.Leagues {
 		league.LeagueGroup = leagGroupID
 		// insert one
-		leagueFilter  := bson.M{"_id": league.LeagueKey}
+		leagueFilter := bson.M{"league_key": league.LeagueKey}
 		updateOptions := options.FindOneAndReplaceOptions{
-			Upsert:                   aws.Bool(true),
+			Upsert: aws.Bool(true),
 		}
 
 		upRes := collection.FindOneAndReplace(ctx, leagueFilter, league, &updateOptions)
 
 		fmt.Println(upRes)
 	}
-
 
 	return leagueGroupd, nil
 }
@@ -250,10 +460,10 @@ func oldSaveUser() (interface{}, interface{}) {
 	//rrDoc := make([]bson.D, len(season.Roster))
 	//for idx, rosterRule := range season.Roster {
 	//	// transformPBUserToUser
-	//	rrDoc[idx] = bson.D{{"position", int(rosterRule.Position)}, {"max", rosterRule.Max}, {"starting", rosterRule.Starting}}
+	//	rrDoc[idx] = bson.D{{"position", int(rosterRule.Pick)}, {"max", rosterRule.Max}, {"starting", rosterRule.Starting}}
 	//
 	//	rosterRules.RosterRules = append(rosterRules.RosterRules, RosterRule{
-	//		Position: int(rosterRule.Position),
+	//		Pick: int(rosterRule.Pick),
 	//		Starting: rosterRule.Starting,
 	//		Max:      rosterRule.Max,
 	//	})

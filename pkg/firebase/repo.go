@@ -4,6 +4,7 @@ import (
 	"cloud.google.com/go/firestore"
 	"context"
 	"errors"
+	firebaseAuth "firebase.google.com/go/auth"
 	"fmt"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -15,12 +16,14 @@ import (
 type Repo struct {
 	logger    log.Logger
 	firestore *firestore.Client
+	client    *firebaseAuth.Client
 }
 
-func NewFirebaseRepository(logger log.Logger, firestore *firestore.Client) Repo {
+func NewFirebaseRepository(logger log.Logger, firestore *firestore.Client, app *firebaseAuth.Client) Repo {
 	return Repo{
 		logger:    logger,
 		firestore: firestore,
+		client: app,
 	}
 }
 
@@ -66,7 +69,7 @@ func (r *Repo) GetCredentialInformation(ctx context.Context, uid string) (entiti
 		return entities.User{}, errors.New("access key was not a string")
 	}
 
-	return entities.User{AccessToken: accessKey}, nil
+	return entities.User{AccessToken: accessKey, GUID: Guid}, nil
 }
 
 func (r *Repo) getDocumentReference(ctx context.Context, docuRef *firestore.DocumentRef) (*firestore.DocumentSnapshot, error) {
@@ -80,22 +83,31 @@ func (r *Repo) SaveYahooCredential(ctx context.Context, uid, accessToken, guid s
 	span, ctx := apm.StartSpan(ctx, "SaveYahooCredential", "db.firebase")
 	defer span.End()
 
-	data := make(map[string]interface{}, 1)
-	docuRef := r.firestore.Collection("users").Doc(uid)
-	if docuRef == nil {
-		level.Debug(r.logger).Log("message", "could not get document", "error", errors.New("yeah no docuref"))
-
+	//data := make(map[string]interface{}, 1)
+	//docuRef := r.firestore.Collection("users").Doc(uid)
+	//if docuRef == nil {
+	//	level.Debug(r.logger).Log("message", "could not get document", "error", errors.New("yeah no docuref"))
+	//
+	//}
+	user, err := r.client.GetUser(ctx, uid)
+	if err != nil {
+		_ = level.Error(r.logger).Log("message", "could not get docuref ", "error", err)
+		return entities.User{}, errors.New("access could not be set")
 	}
+	user.CustomClaims[AccessKey] = accessToken
+	user.CustomClaims[Guid] = guid
 
-	data[AccessKey] = accessToken
-	data[Guid] = guid
-	_, err := docuRef.Set(ctx, data)
+	cClaims := user.CustomClaims
+	userToUpdate := &firebaseAuth.UserToUpdate{}
+	userToUpdate = userToUpdate.CustomClaims(cClaims)
+
+	_, err = r.client.UpdateUser(ctx,uid, userToUpdate)
 	if err != nil {
 		_ = level.Error(r.logger).Log("message", "could not save docuref ", "error", err)
 		return entities.User{}, errors.New("access could not be set")
 	}
 
-	return entities.User{AccessToken: accessToken}, nil
+	return entities.User{AccessToken: accessToken, GUID: guid, UserID: uid}, nil
 }
 
 func (r *Repo) SaveYahooInformation(ctx context.Context, uid, accessToken, refreshToken, email, guid string) (entities.User, error) {
