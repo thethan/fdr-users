@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	firebaseAuth "firebase.google.com/go/auth"
-	"fmt"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/thethan/fdr-users/pkg/auth"
@@ -14,6 +13,7 @@ import (
 	"go.elastic.co/apm"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"sync"
 	"time"
 
 	pb "github.com/thethan/fdr_proto"
@@ -196,11 +196,18 @@ func (s usersService) GetUsersLeagues(ctx context.Context, in *UserCredentialReq
 		return nil, status.Errorf(codes.Unauthenticated, "invalid auth token: %v", ok)
 	}
 
+	wg := sync.WaitGroup{}
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		user, _ := s.userInfo.GetCredentialInformation(ctx, token.UID)
+
+		token.Claims["yahoo_guid"] = user.GUID
+	}()
 	var yahooID string
 	// get token from uuid
 	for key, identifiers := range token.Firebase.Identities {
 		if key == "yahoo.com" {
-			fmt.Printf("%v", identifiers)
 			yahooID, ok = identifiers.([]interface{})[0].(string)
 			if !ok {
 				return nil, errors.New("could not get authenticator token")
@@ -223,12 +230,14 @@ func (s usersService) GetUsersLeagues(ctx context.Context, in *UserCredentialReq
 	if err != nil {
 		level.Error(s.logger).Log("message", "could not get user leagues", "error", err, "guid", in.Guid)
 	}
+	wg.Done()
+	wg.Wait()
 
 	resp = UserCredentialResponse{
-		UID: in.UID,
-		//Session:      in.AccessToken,
-		//RefreshToken: user.RefreshToken,
-		//Guid:         user.GUID,
+		UID:   token.UID,
+		Email: token.Claims["email"].(string),
+		Guid:  token.Claims["yahoo_guid"].(string),
+
 		Leagues: leagueGroups,
 	}
 

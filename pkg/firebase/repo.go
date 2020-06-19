@@ -69,7 +69,19 @@ func (r *Repo) GetCredentialInformation(ctx context.Context, uid string) (entiti
 		return entities.User{}, errors.New("access key was not a string")
 	}
 
-	return entities.User{AccessToken: accessKey, GUID: Guid}, nil
+	guidInterface, ok := data[Guid]
+	if !ok {
+		level.Error(r.logger).Log("message", "data did not have guid")
+		return entities.User{}, errors.New("goth did not have guid")
+	}
+
+	guid, ok := guidInterface.(string)
+	if !ok {
+		_ = level.Error(r.logger).Log("message", "guid is not a string ")
+		return entities.User{}, errors.New("guid was not a string")
+	}
+
+	return entities.User{AccessToken: accessKey, GUID: guid}, nil
 }
 
 func (r *Repo) getDocumentReference(ctx context.Context, docuRef *firestore.DocumentRef) (*firestore.DocumentSnapshot, error) {

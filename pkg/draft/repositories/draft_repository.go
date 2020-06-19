@@ -7,7 +7,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/golang/protobuf/ptypes/timestamp"
 	"github.com/thethan/fdr-users/pkg/draft/entities"
 	pb "github.com/thethan/fdr_proto"
 	"go.elastic.co/apm"
@@ -15,6 +14,8 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"strings"
+	"time"
 )
 
 const database string = "fdr"
@@ -74,9 +75,143 @@ type RosterRule struct {
 func NewMongoRepository(logger log.Logger, client *mongo.Client, database string, draftCollection, userCollection, rosterCollection string) MongoRepository {
 	return MongoRepository{logger: logger, client: client, database: database,
 		draftCollection:        draftCollection,
-		draftResultsCollection: "draft-results",
+		draftResultsCollection: "draft_results",
 		userCollection:         userCollection,
 		rosterCollection:       rosterCollection}
+}
+
+func getPlayerLeagueCollection(leagueKey string) string {
+	tableVar := strings.Replace(leagueKey, ".", "", 2)
+	return "players_per_league_" + tableVar
+}
+
+func (m MongoRepository) ImportAllAvailablePlayers(ctx context.Context, gameID int, leagueKey string) error {
+	newTable := getPlayerLeagueCollection(leagueKey)
+
+	tableCollection := m.client.Database(database).Collection(newTable)
+
+	_ = tableCollection.Drop(ctx)
+	models := []mongo.IndexModel{
+		{
+			Keys: bson.M{
+				"players.name.full": "text",
+			},
+		},
+		{
+			Keys: bson.M{
+				"league_key": 1,
+			},
+		},
+		{
+			Keys: bson.M{
+				"players.player_key": 1,
+			},
+		},
+		{
+			Keys: bson.M{
+				"players.eligiblepositions": 1,
+			},
+		},
+		{
+			Keys: bson.M{
+				"draft_results.team_key": 1,
+			},
+		},
+		{
+			Keys: bson.M{
+				"draft_results.user_guid": 1,
+			},
+		},
+	}
+
+	opts := options.CreateIndexes().SetMaxTime(10 * time.Second)
+	_, err := tableCollection.Indexes().CreateMany(ctx, models, opts)
+	if err != nil {
+		return err
+	}
+	// create Index
+
+	pipeline := mongo.Pipeline{
+		bson.D{{"$project", bson.M{"_id": 0, "league_key": 1, "game.game_id": 1, "leagues": "$$ROOT"}}},
+		bson.D{{"$lookup", bson.M{"from": playersBySeason, "localField": "game.game_id", "foreignField": "game_id", "as": "player"}}},
+		bson.D{{"$unwind", bson.M{"path": "$player", "preserveNullAndEmptyArrays": false}}},
+		bson.D{{"$lookup", bson.M{"from": draftsCollection, "localField": "player._id", "foreignField": "player_key", "as": "draft_results"}}},
+		bson.D{{"$unwind", bson.M{"path": "$draft_results", "preserveNullAndEmptyArrays": true}}},
+		bson.D{{"$match", bson.M{"league_key": leagueKey}}},
+		bson.D{{"$out", newTable}},
+	}
+	collection := m.client.Database(database).Collection(leaguesCollection)
+	findOptions := &options.AggregateOptions{
+		AllowDiskUse: aws.Bool(true),
+	}
+	_, err = collection.Aggregate(ctx, pipeline, findOptions)
+
+	return err
+}
+
+//
+
+type QueryBson struct {
+	ID           primitive.ObjectID    `bson:"_id"`
+	Leagues      entities.League       `bson:"leagues"`
+	Players      entities.PlayerSeason `bson:"players"`
+	DraftResults entities.DraftResult  `bson:"draft_results"`
+}
+
+func (m MongoRepository) GetAvailablePlayersForDraft(ctx context.Context, gameID int, leagueKey string, limit, offset int, eligiblePositions []string, search string) ([]entities.LeaguePlayer, error) {
+	span, ctx := apm.StartSpan(ctx, "GetAvailablePlayersForDraft", "repository.Mongo")
+	defer span.End()
+
+	newTable := getPlayerLeagueCollection(leagueKey)
+
+	collection := m.client.Database(database).Collection(newTable)
+	findOptions := &options.AggregateOptions{}
+	elements := make([]bson.E, 0)
+
+	elements = append(elements, bson.E{Key: "draft_results", Value: bson.M{"$exists": false}})
+	elements = append(elements, bson.E{Key: "league_key", Value: leagueKey})
+
+	if len(eligiblePositions) > 0 {
+		elements = append(elements, bson.E{Key: "player.eligiblepositions", Value: bson.M{"$in": bson.A{eligiblePositions}}})
+	}
+
+	if search != "" {
+		elements = append(elements, bson.E{Key: "player.name.full", Value: bson.M{"$regex": fmt.Sprintf(".*%s.*", search)}})
+	}
+
+	pipeline := mongo.Pipeline{
+		bson.D{{"$match", elements}},
+		bson.D{{"$limit", limit}},
+		bson.D{{"$skip", offset}},
+	}
+
+	cursor, err := collection.Aggregate(ctx, pipeline, findOptions)
+	if err != nil {
+		level.Error(m.logger).Log("message", "could not get players results", "error", err, "game_id", gameID)
+		return []entities.LeaguePlayer{}, nil
+	}
+
+	players := make([]entities.LeaguePlayer, limit)
+	err = cursor.All(ctx, &players)
+	if err != nil {
+		return []entities.LeaguePlayer{}, nil
+	}
+
+	return players, nil
+	//for cursor.Next(ctx) {
+	//	var draftResult entities.PlayerSeason
+	//	bsonBytes, err := bson.Marshal(&bsonM)
+	//	if err != nil {
+	//		return nil, err
+	//	}
+	//
+	//	err = bson.Unmarshal(bsonBytes, &draftResult)
+	//	if err != nil {
+	//		return nil, err
+	//	}
+	//	draftResults[idx] = draftResult
+	//}
+
 }
 
 func (m MongoRepository) GetDraftResults(ctx context.Context, leagueKey string) ([]entities.DraftResult, error) {
@@ -117,6 +252,51 @@ func (m MongoRepository) GetDraftResults(ctx context.Context, leagueKey string) 
 
 	return draftResults, nil
 }
+
+// {"teams.manager":{ $elemMatch: {"guid":"DPPQCXCRV75Z2LKJW5YRC7RAYM"}}}
+func (m MongoRepository) SaveDraftResultFromUser(ctx context.Context, league entities.League, user entities.User, team entities.Team, player entities.PlayerSeason, pick, round int) (*entities.DraftResult, error) {
+	span, ctx := apm.StartSpan(ctx, "SaveDraftResult", "repository.Mongo")
+	defer span.End()
+
+	draftResult := entities.DraftResult{
+		UserGUID:  user.Guid,
+		PlayerKey: player.PlayerKey,
+		PlayerID:  player.PlayerID,
+		LeagueKey: league.LeagueKey,
+		TeamKey:   team.TeamKey,
+		Round:     round,
+		Pick:      pick,
+		Timestamp: time.Now(),
+		GameID:    league.Game.GameID,
+		Player:    []*entities.PlayerSeason{&player},
+	}
+
+
+	err := m.SaveDraftResult(ctx, draftResult)
+	if err != nil {
+		level.Error(m.logger).Log("message", "error in saving draft result", "err", err)
+		return nil, err
+	}
+
+	newTable := getPlayerLeagueCollection(league.LeagueKey)
+
+	collection := m.client.Database(database).Collection(newTable)
+
+	res := bson.M{"$set": bson.M{"draft_results": draftResult}}
+	filter := bson.M{"player._id": player.PlayerKey}
+	insertResult, err := collection.UpdateOne(ctx, filter, res)
+	if err != nil {
+		level.Error(m.logger).Log("error", err, "could not execute query", "guid", draftResult.UserGUID, "league_key", league.LeagueKey)
+		return nil, err
+	}
+
+
+	level.Debug(m.logger).Log("message", "insert draft result", "upsert_id", insertResult.UpsertedID, "player_key", draftResult.PlayerKey)
+	return &draftResult, nil
+}
+
+// @todo clean this up
+// lookup Player
 
 // {"teams.manager":{ $elemMatch: {"guid":"DPPQCXCRV75Z2LKJW5YRC7RAYM"}}}
 func (m MongoRepository) SaveDraftResult(ctx context.Context, draftResult entities.DraftResult) error {
@@ -519,13 +699,6 @@ func oldSaveUser() (interface{}, interface{}) {
 	return nil, nil
 }
 
-func (m MongoRepository) CreateDraft(ctx context.Context, season pb.Season) (pb.Season, error) {
-	span, ctx := apm.StartSpan(ctx, "CreateDraft", "repository.Mongo")
-	defer span.End()
-
-	return pb.Season{}, nil
-}
-
 func (repo *MongoRepository) getUserCollection(ctx context.Context) *mongo.Collection {
 	return repo.client.Database(repo.database).Collection(repo.userCollection)
 }
@@ -584,71 +757,4 @@ func (m MongoRepository) ListUserDrafts(ctx context.Context, pbUser pb.User) ([]
 	res.Decode(&user)
 
 	return []pb.Season{}, nil
-}
-
-func transformDraftToPBSeason(draft Draft) (pb.Season, error) {
-	//yearInt := strconv.Itoa(draft.Year)
-	var timeHmmm *timestamp.Timestamp
-
-	timeTime := draft.DraftTime.Time()
-	timeHmmm = &timestamp.Timestamp{
-		Seconds: timeTime.Unix(),
-		Nanos:   int32(timeTime.UnixNano()),
-	}
-
-	season := pb.Season{
-		ID: draft.ID.Hex(),
-		//:      yearInt,
-		League:    pb.League(draft.League),
-		DraftType: pb.DraftType(draft.DraftType),
-		DraftTime: timeHmmm,
-	}
-
-	for idx := range draft.Users {
-		pbUser, _ := transformUserToPBUser(draft.Users[idx])
-		season.Users = append(season.Users, &pbUser)
-	}
-
-	for idx := range draft.Commissioners {
-		pbUser, _ := transformUserToPBUser(draft.Commissioners[idx])
-		season.Commissioners = append(season.Users, &pbUser)
-	}
-	return season, nil
-}
-
-func transformPBUserToUser(user *pb.User) (User, error) {
-	return User{
-		Email: user.Email,
-		Image: user.Image,
-		Name:  user.Name,
-	}, nil
-
-}
-
-func transformUserToPBUser(user User) (pb.User, error) {
-
-	return pb.User{
-		Email: user.Email,
-		Image: user.Image,
-		Name:  user.Name,
-	}, nil
-
-}
-
-func transformRosterToRosterPB(rosterRules RosterRules) ([]*pb.RosterRules, error) {
-	rules := make([]*pb.RosterRules, len(rosterRules.RosterRules))
-	for idx, rosterRule := range rosterRules.RosterRules {
-		rr := transformRosterRuleToPBRosterSlot(rosterRule)
-		rules[idx] = &rr
-	}
-	return rules, nil
-}
-
-// transformRosterRuleToPBRosterSlot
-func transformRosterRuleToPBRosterSlot(rule RosterRule) pb.RosterRules {
-	return pb.RosterRules{
-		Position: pb.PlayerPosition(rule.Position),
-		Starting: rule.Starting,
-		Max:      rule.Max,
-	}
 }

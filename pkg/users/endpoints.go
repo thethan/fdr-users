@@ -171,6 +171,7 @@ func MakeGetUserLeaguesEndpoint(s *usersService) endpoint.Endpoint {
 		span, ctx := apm.StartSpan(ctx, "GetUserLeaguesEndpoint", "endpoint")
 		defer span.End()
 
+
 		req := request.(*UserCredentialRequest)
 		v, err := s.GetUsersLeagues(ctx, req)
 		if err != nil {

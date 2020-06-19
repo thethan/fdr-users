@@ -23,7 +23,7 @@ type mockGetUserInformation struct {
 
 func getUser() entities2.User {
 	return entities2.User{
-		AccessToken: "WnFFO7WY4x_0EL6r9tPgpqQazK7oQ.LLIpHq6DD33VQ_EdGBfoMWMEAC5h26FjRMtJOfShnocLVAyeJTuKewYJH6Ugf0rvx6V.xxwa9Gwx.F2h1yiYRAa9wMtKp_q2b_wc9kqY4260aZ.C3ZZyk9q83eaC8QBPOa37K3MdEnsb0NDxbSkcJGypEU_x729sUuwLmWcSJ_QYzPaaobW3MhM9TSiEWwP5oOAqPOiXHhYbbeBdSAfLpcCGk9clFCGlWpcBOOea7KS7xf8c7HFPUEy2ZbsA4e5pttJvIPai4NDW6akB3XYaISbr0aYQlrg7P3_9kA1TQKNYS7VtfMHLQN8VBtG9kEu2tnxN2QN2zt.zsOYxjLBm_jr2fcA7yy8pybnpHqTpuakEAdf.P5k5Vy_AFle71uQRh43PKoG1_cw2ff.SnhScDSypiPG.u8idl6VsRNg1JM6nTSXb.xrEmBNKbX.CHtGGI_8LCV2_db6GT_IxPBYgMc7mVVeOjTvhbsjdFyYT6i4lZP2BrpYv_teV6uOpDguCpb6rhIf616cZOSjWfL7xnnfRvyKII27mP8YypOLuZw.0msVQ8wrv6kjZSKf3mECE5RSKZQfsXTIgFo_PKm1FhBL03iMt_DY4dJoy2ZbFwmhC5Vo8r7FyAtRtsr4ARtTMXxPGvki1uotmxWlRlBlUpPM2Pie6hGrxnpz0kXx8LHAqibOtcO2J8p2tkAq0Zg4apdpdUkVGRYcfCbsnH5nr6LMxU0FPKVGlYBovj1ClrAmxm6gW0zKLsdIcU8kpdbddR.PWFWGRHHmq.nZUzQbCa0Yb4.m6v2xe8mgp9vMqapm.CcmYcwyVX8dHkX6X_feen4H3eWRNxFQeuyf7a4FYRvNcz3lxgJIEQJOrshIwVVTZ5zXw8GaQhU6oCS6fVm0fmfKXaiG0XBSukb3DvAmGPxjgEU.eVFY3_xFpEUhXi0wk8_RLf3sXbnffhogGGtCmK.8CNwGkcYlbUt3REYeU.gE_8eCe7ydZiUgewPAGWLsntaZXN2s8Tq1Ur80PcVPOVjfVC_S863uoPvHeiJWDJCSYGNSasTFAqGLJArtTzgudRNTy0QIkQzLy08piWWyedwwB8EhipO",
+		AccessToken: "3oxRd8Sd7gCQ1_5hI6It6aon70cfgK_yg5PjVt4mnCIhFSeMZ6u9SUNlweofBLten53DznzPyIe._wPbKSKZapFlXGvgmLwJewZJqP_WwG3TcUzZfIPEY5wOcEMQBwsmExsyoj_Eb5uzY69Ptp6tgVfORfyhFY1Kl4HsHljUbzPhMW_2m97uMcubv5heQqjtOwv5tHSqXadUMF4A8ENS.txbjPmZIu2KWwQkR7rwYvE8WxRucaXX6K0KG.Hu8gDgkUFJfM67CzK25PaH0DI7dG1X.2DtDrcSDF85xVy8vObWKHKejXEUdHllnxEpUQbJ3wN3Cb2oYX8b77f50y00jki.J5.F58Df3wNLFZQvVmWF_2_eCueBbPgXigLsnDGw1ltlDgS5vtmxvqe_c8HGPCjOAvkaeaBk2qx10Zwcpt9yiBdv1t1.3XWl3F3nL9qsoIk1u1bk.ldCkZxnh1YItKIxwdy1y_aE5SBxidr7NAVuhyeRv0ZRI0vv7Fi9tMoflQfKIe_fWwvJOQ.s.2qjp3nSUSGPwrHgYbAt4QrcYqXvclJ5IJt5EsCQmpS6X5r3L5O33ujzRRs9gR07m2_VuYajr6wFB4OeMpSGXL0edxJoncOJP5vmS46nOVvHCW3NsHFN5z5gZ_QYBo5ifihWy2qTJnzL6Cd2IfhwWRxiSZGFWAnDRT1yz95QDazsMSM.fF1WHAaxYoq7xwldSiTQtLeTswejOj8AsscB7vnNozblYg0.jq0kUKUVxHSueXl21zjmy6Euew005YSukQTaNaiFLcdyGUd01HP56Joed4KVO7CvA54QtEuTH2dedWkNwkTzVyl1yYFRX2HWFcSZoD.4YVMfnivAxl92EHg.qiJ3w4_5xcLmCGm8lbR5IJ0o1JQKi2BhmN7_d5M4d58tTbXEFlRs3IpMwdbWZzSetwza7geVeLrIT_F6CD2nd.dg189s76TYh6Fyokx.d1PyGGGrLQkIXH3VAxdq1PQEiJnV7dlxCN3CYHBol5gviOseYQtym_YdJszvWVtix2BY74L8DeMpLLmeIlB8fvGTLIdfBeVAlFDMBG1hhDYV5GJr4yU.bLZQ8yHAgHDLzpJ4Y_h6Lrl1tC4YjCBVjuieug--",
 	}
 }
 
@@ -106,7 +106,7 @@ func TestImporter_ImportGamePlayers(t *testing.T) {
 
 	svc := NewImportService(logger, yahooService, &mongoRepo)
 
-	err = svc.ImportGamePlayers(ctx, 273)
+	err = svc.ImportGamePlayers(ctx, 399)
 	assert.Nil(t, err)
 }
 
@@ -186,4 +186,38 @@ func TestImporter_ImportDraftResultForUser(t *testing.T) {
 
 
 
-// T3 Cancer
+func TestImporter_ImportPlayersFromGamesForUser(t *testing.T) {
+	logger := test_helpers.LogrusLogger(t)
+	ctx := context.Background()
+	tracer, err := apm.NewTracer(t.Name(), "0")
+	if tracer == nil || err != nil {
+		t.Fail()
+		t.FailNow()
+	}
+	tx := tracer.StartTransaction(t.Name(), "0")
+	span, ctx := apm.StartSpanOptions(ctx, "TestImporter_ImportPlayersFromGamesForUser", "test", apm.SpanOptions{
+		Parent: tx.TraceContext(),
+	})
+	defer span.End()
+	defer tx.End()
+
+	mockUserInfo := mockGetUserInformation{}
+
+	mockUserInfo.On("GetCredentialInformation", mock.AnythingOfType(reflect.TypeOf(ctx).String()), mock.AnythingOfType("string")).Return(getUser(), nil)
+
+	yahooService := yahoo.NewService(logger, &mockUserInfo)
+
+	mongoClient, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"))
+	if err != nil {
+		logger.Log("message", "error in initializing mongo client", "error", err)
+		t.FailNow()
+	}
+
+	mongoRepo := repositories.NewMongoRepository(logger, mongoClient, "fdr", "draft", "fdr_user", "roster")
+
+	svc := NewImportService(logger, yahooService, &mongoRepo)
+
+	err = svc.ImportGamePlayersUserHasAccessTo(ctx, "MFG5HMFDHC634Q7W2FPKJBVTKY")
+	assert.Nil(t, err)
+}
+

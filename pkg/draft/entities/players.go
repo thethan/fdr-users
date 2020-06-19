@@ -1,8 +1,16 @@
 package entities
 
+type LeaguePlayer struct {
+	League      League       `bson:"leagues" json:"league,omitempty"`
+	DraftResult *DraftResult `bson:"draft_results,omitempty" json:"draft_result,omitempty"`
+	Player      PlayerSeason `bson:"player" json:"player"`
+	Team        *Team        `json:"team" bson:"-"`
+}
+
 type PlayerSeason struct {
 	PlayerKey             string         `json:"player_key" bson:"_id"`
-	PlayerID              int            `json:"player_id"`
+	PlayerID              int            `json:"player_id" bson:"player_id"`
+	GameID                int            `json:"game_id" bson:"game_id"`
 	Name                  PlayerName     `json:"name"`
 	EditorialPlayerKey    string         `json:"editorial_player_key"`
 	EditorialTeamKey      string         `json:"editorial_team_key"`

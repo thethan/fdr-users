@@ -13,7 +13,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/go-kit/kit/log"
-	"github.com/thethan/fdr-users/pkg/draft"
+	"github.com/thethan/fdr-users/pkg/players"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -49,7 +49,7 @@ var (
 
 // MakeHTTPHandler returns a handler that makes a set of endpoints available
 // on predefined paths.
-func MakeHTTPHandler(logger log.Logger, endpoints draft.Endpoints, m *mux.Router, authServerBefore httptransport.RequestFunc, options ...httptransport.ServerOption) *mux.Router {
+func MakeHTTPHandler(logger log.Logger, endpoints players.Endpoints, m *mux.Router, authServerBefore httptransport.RequestFunc, options ...httptransport.ServerOption) *mux.Router {
 	serverOptions := []httptransport.ServerOption{
 		httptransport.ServerBefore(headersToContext),
 		httptransport.ServerErrorEncoder(errorEncoder),
@@ -59,16 +59,10 @@ func MakeHTTPHandler(logger log.Logger, endpoints draft.Endpoints, m *mux.Router
 	serverOptionsAuth := append(serverOptions, httptransport.ServerBefore(authServerBefore))
 
 	m = m.PathPrefix("/leagues").Subrouter()
-	m.Methods(http.MethodGet).Path("/{"+leagueIdParam+"}/draft").Handler(httptransport.NewServer(
-		endpoints.GetLeagueDraft,
-		DecodeHTTPGetLeaugueDraft,
-		EncodeHTTPDraftResults,
-		serverOptionsAuth...,
-	))
-	m.Methods(http.MethodPost).Path("/{"+leagueIdParam+"}/draft").Handler(httptransport.NewServer(
-		endpoints.SaveDraftResult,
-		DecodeHTTPSaveDraftResult,
-		EncodeHTTPDraftResult,
+	m.Methods(http.MethodGet).Path("/{"+leagueIdParam+"}/players").Handler(httptransport.NewServer(
+		endpoints.GetAvailablePlayers,
+		DecodeHTTPGetAvailablePlayersForLeague,
+		EncodeHTTPGetAvailablePlayers,
 		serverOptionsAuth...,
 	))
 	return m
@@ -160,9 +154,9 @@ func headersToContext(ctx context.Context, r *http.Request) context.Context {
 
 
 
-func DecodeHTTPGetLeaugueDraft(ctx context.Context, r *http.Request) (interface{}, error) {
+func DecodeHTTPGetAvailablePlayersForLeague(ctx context.Context, r *http.Request) (interface{}, error) {
 	defer r.Body.Close()
-	var req draft.LeagueDraftRequest
+	var req players.GetAvailablePlayersRequest
 	buf, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		return nil, errors.Wrapf(err, "cannot read body of http request")
@@ -186,66 +180,34 @@ func DecodeHTTPGetLeaugueDraft(ctx context.Context, r *http.Request) (interface{
 	if !ok {
 		return nil, errors.New("bad request")
 	}
+
+	gameIDs := strings.Split(".l.", leagueKey)
+	if len(gameIDs) == 0 {
+		return nil, errors.New("could not get game id from league")
+	}
+	req.GameID, _ = strconv.Atoi(gameIDs[0])
 
 	req.LeagueKey = leagueKey
 
 	queryParams := r.URL.Query()
-	_ = queryParams
-
-	return &req, err
-}
-
-
-
-// EncodeHTTPGenericResponse is a transport/http.EncodeResponseFunc that encodes
-// the response as JSON to the response writer. Primarily useful in a server.
-func EncodeHTTPDraftResults(_ context.Context, w http.ResponseWriter, response interface{}) error {
-	res, ok := response.(*draft.DraftResultResponse)
-	if !ok {
-		return errors.New("could not get user Credentials Response ")
+	// limit
+	limtString := queryParams.Get("limit")
+	limit, _ := strconv.Atoi(limtString)
+	if limit == 0 {
+		limit = 50
 	}
-	bytesJson, err := json.Marshal(&res)
-	if err != nil {
-		return err
-	}
-	w.Write(bytesJson)
-	return nil
-}
-
-
-
-func DecodeHTTPSaveDraftResult(ctx context.Context, r *http.Request) (interface{}, error) {
-	defer r.Body.Close()
-	var req draft.SaveDraftResultRequest
-	buf, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		return nil, errors.Wrapf(err, "cannot read body of http request")
-	}
-	if len(buf) > 0 {
-		// AllowUnknownFields stops the unmarshaler from failing if the JSON contains unknown fields.
-		if err = json.Unmarshal(buf, &req); err != nil {
-			const size = 8196
-			if len(buf) > size {
-				buf = buf[:size]
-			}
-			return nil, httpError{errors.Wrapf(err, "request body '%s': cannot parse non-json request body", buf),
-				http.StatusBadRequest,
-				nil,
-			}
-		}
+	req.Limit = limit
+	// offset
+	offsetString := queryParams.Get("offset")
+	offset, _ := strconv.Atoi(offsetString)
+	req.Offset = offset
+	// positions
+	positions := queryParams.Get("positions")
+	if len(positions) > 0 {
+		pos := strings.Split(",", positions)
+		req.Positions = pos
 	}
 
-	pathParams := mux.Vars(r)
-	leagueKey, ok := pathParams[leagueIdParam]
-	if !ok {
-		return nil, errors.New("bad request")
-	}
-	if leagueKey != req.League.LeagueKey {
-		return nil, errors.New("bad request")
-	}
-
-	//queryParams := r.URL.Query()
-	//_ = queryParams
 
 	return &req, err
 }
@@ -253,8 +215,8 @@ func DecodeHTTPSaveDraftResult(ctx context.Context, r *http.Request) (interface{
 
 // EncodeHTTPGenericResponse is a transport/http.EncodeResponseFunc that encodes
 // the response as JSON to the response writer. Primarily useful in a server.
-func EncodeHTTPDraftResult(_ context.Context, w http.ResponseWriter, response interface{}) error {
-	res, ok := response.(*draft.DraftResultResponse)
+func EncodeHTTPGetAvailablePlayers(_ context.Context, w http.ResponseWriter, response interface{}) error {
+	res, ok := response.(*players.GetAvailablePositionsForLeague)
 	if !ok {
 		return errors.New("could not get user Credentials Response ")
 	}

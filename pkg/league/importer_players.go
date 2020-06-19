@@ -27,7 +27,7 @@ func (i Importer) ImportGamePlayers(ctx context.Context, gameID int) error {
 		if len(res.Game.Players.Player) < 25 {
 			fin = true
 		}
-		players := transformPlayerResponseToPlayers(ctx, res, startingCounter)
+		players := transformPlayerResponseToPlayers(ctx, gameID, res, startingCounter)
 		_, err = i.repo.SavePlayers(ctx, players)
 		if err != nil {
 			level.Error(i.logger).Log("message", "could not save players", "error", err)
@@ -38,13 +38,39 @@ func (i Importer) ImportGamePlayers(ctx context.Context, gameID int) error {
 	return nil
 }
 
-func transformPlayerResponseToPlayers(ctx context.Context, gamePlayers yahoo.GameResourcePlayerResponse, startingCounter int) []entities.PlayerSeason {
+
+func (i Importer) ImportGamePlayersUserHasAccessTo(ctx context.Context, guid string) error {
+	span, ctx := apm.StartSpan(ctx, "ImportGamePlayersUserHasAccessTo", "service")
+	defer func() {
+		span.End()
+	}()
+
+
+	gameHashMap := make(map[int]bool)
+	leagues, err := i.repo.GetTeamsForManagers(ctx, guid)
+	if err != nil {
+		return err
+	}
+	for _, league := range leagues {
+		if imported, ok := gameHashMap[league.Game.GameID]; !imported || !ok  {
+			err = i.ImportGamePlayers(ctx, league.Game.GameID)
+			if err != nil {
+				level.Error(i.logger).Log("message", "error in importing game", "err", err, "game_id", league.Game.GameID)
+			}
+			gameHashMap[league.Game.GameID] = true
+		}
+	}
+
+	return nil
+}
+
+func transformPlayerResponseToPlayers(ctx context.Context, gameID int,  gamePlayers yahoo.GameResourcePlayerResponse, startingCounter int) []entities.PlayerSeason {
 	span, ctx := apm.StartSpan(ctx, "transformPlayerResponseToPlayers", "service.importer")
 	defer span.End()
 
 	players := make([]entities.PlayerSeason, len(gamePlayers.Game.Players.Player))
 	for idx, yahooPlayer := range gamePlayers.Game.Players.Player {
-		player := transformPlayerResponseToPlayer(ctx, yahooPlayer, (idx+1)+startingCounter)
+		player := transformPlayerResponseToPlayer(ctx, gameID,  yahooPlayer, (idx+1)+startingCounter)
 		player.SeasonStats = transformYahooSeasonStats(ctx, yahooPlayer)
 		players[idx] = player
 	}
@@ -52,7 +78,7 @@ func transformPlayerResponseToPlayers(ctx context.Context, gamePlayers yahoo.Gam
 	return players
 }
 
-func transformPlayerResponseToPlayer(ctx context.Context, yahooPlayer yahoo.GameResourcePlayerStats, rank int) entities.PlayerSeason {
+func transformPlayerResponseToPlayer(ctx context.Context, GameID int, yahooPlayer yahoo.GameResourcePlayerStats, rank int) entities.PlayerSeason {
 	span, ctx := apm.StartSpan(ctx, "transformPlayerResponseToPlayer", "service.importer")
 	defer span.End()
 
@@ -62,6 +88,7 @@ func transformPlayerResponseToPlayer(ctx context.Context, yahooPlayer yahoo.Game
 	player := entities.PlayerSeason{
 		PlayerKey: yahooPlayer.PlayerKey,
 		PlayerID:  yahooPlayer.PlayerID,
+		GameID: GameID,
 		Name: entities.PlayerName{
 			Full:       yahooPlayer.Name.Full,
 			First:      yahooPlayer.Name.First,

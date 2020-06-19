@@ -3,7 +3,6 @@ package auth
 import (
 	"context"
 	firebaseAuth "firebase.google.com/go/auth"
-	"fmt"
 	"github.com/go-kit/kit/endpoint"
 	"github.com/go-kit/kit/log"
 	"github.com/thethan/fdr-users/pkg/firebase"
@@ -52,13 +51,11 @@ func (as AuthService) ServerAuthentication(ctx context.Context, logger log.Logge
 }
 
 func (as AuthService) addFirebaseTokenToContext(ctx context.Context, tokenString string) (context.Context, error){
-	fmt.Printf("Token String %s\n", tokenString)
 	ctx, err := as.parseToken(ctx, tokenString)
 	if err != nil {
 		return nil, status.Errorf(codes.Unauthenticated, "invalid auth token: %v", err)
 	}
 	tokenInterface := ctx.Value(FirebaseToken)
-	fmt.Printf("Token Iface %v\n", tokenInterface)
 
 	token, ok := tokenInterface.(*firebaseAuth.Token)
 	if !ok {
@@ -89,7 +86,6 @@ func (a AuthService) NewAuthMiddleware() endpoint.Middleware {
 
 			tokenIface := ctx.Value(BearerToken)
 			tokenString := tokenIface.(string)
-			fmt.Printf("Token string %v\n", tokenString)
 
 			ctx, err := a.addFirebaseTokenToContext(ctx, tokenString)
 			if err != nil {

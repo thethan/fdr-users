@@ -12,6 +12,7 @@ type User struct {
 	ManagerID      string `json:"manager_id"`
 	Nickname       string `json:"nickname"`
 	Guid           string `json:"guid"`
+	Uid            string `json:"uid"`
 	IsCommissioner bool   `json:"is_commissioner"`
 	IsCurrentLogin bool   `json:"is_current_login"`
 	ImageURL       string `json:"image_url"`
@@ -37,6 +38,7 @@ type League struct {
 	DraftOrder     []string           `json:"-" bson:"draft_order,omitempty"`
 	TeamDraftOrder []Team             `json:"draft_order,omitempty" bson:"-"`
 	DraftStarted   bool               `json:"draft_started,omitempty" bson:"draft_started,omitempty"`
+	DraftedCheck   []string           `json:"drafted_check" bson:"draft_check"`
 }
 
 func (l *League) GetParentID() *int {

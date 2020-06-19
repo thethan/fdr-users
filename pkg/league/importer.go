@@ -255,7 +255,7 @@ func (i *Importer) ImportLeagueFromUser(ctx context.Context) ([]*entities.League
 		span.End()
 	}()
 	// string is yahoo's guid
-	//var userTeams map[string]Team
+	//var userTeams map[string]TeamKey
 	res, err := i.yahooService.GetUserResourcesGameLeaguesResponse(ctx)
 	if err != nil {
 		level.Error(i.logger).Log("message", "could not get GetUserResourcesGameLeaguesResponse from yahoo", "error", err)
@@ -307,7 +307,9 @@ func (i *Importer) ImportDraftResultsForUser(ctx context.Context, guid string) e
 	}
 	for _, league := range leagues {
 		_, err = i.ImportDraftResults(ctx, league.LeagueKey)
-		level.Error(i.logger).Log("message", "error in importing draft results", "err", err, "league_key", league.LeagueKey)
+		if err != nil {
+			level.Error(i.logger).Log("message", "error in importing draft results", "err", err, "league_key", league.LeagueKey)
+		}
 	}
 	return nil
 }
@@ -318,7 +320,7 @@ func (i *Importer) ImportDraftResults(ctx context.Context, leagueKey string) (en
 		span.End()
 	}()
 
-	//teams := make([]entities.Team, 0, 20)
+	//teams := make([]entities.TeamKey, 0, 20)
 	teamKeyToTeamMap := make(map[string]entities.Team, 0)
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
@@ -337,7 +339,7 @@ func (i *Importer) ImportDraftResults(ctx context.Context, leagueKey string) (en
 	}()
 
 	// string is yahoo's guid
-	//var userTeams map[string]Team
+	//var userTeams map[string]TeamKey
 	res, err := i.yahooService.GetLeagueResourcesDraftResults(ctx, leagueKey)
 	if err != nil {
 		level.Error(i.logger).Log("message", "error getting draft results")
@@ -377,14 +379,14 @@ func (i *Importer) ImportDraftResults(ctx context.Context, leagueKey string) (en
 		playerIDs := strings.Split(dr.PlayerKey, ".p.")
 
 		playerID := 0
-		if len(playerIDs) ==2 {
+		if len(playerIDs) == 2 {
 			playerID, err = strconv.Atoi(playerIDs[1])
 		}
 		result := entities.DraftResult{
 			UserGUID:  teamKeyToTeamMap[dr.TeamKey].Manager[0].Guid,
 			PlayerKey: dr.PlayerKey,
 			PlayerID:  playerID,
-			Team:      dr.TeamKey,
+			TeamKey:   dr.TeamKey,
 			LeagueKey: draft.ID,
 			Round:     dr.Round,
 			Pick:      dr.Pick,
@@ -453,7 +455,7 @@ func transformTeamResponseToTeam(res yahoo.TeamResponse) entities.Team {
 //		ID:           primitive.ObjectID{},
 //		Settings:     nil,
 //		DraftResults: nil,
-//		Teams:        make([]Team),
+//		Teams:        make([]TeamKey),
 //		Game:         Game{},
 //	}
 //}
@@ -602,16 +604,20 @@ func transformYahooStatModifierBonusToBonus(yahooBonus *yahoo.Bonus) *entities.B
 
 func transformManagerToUser(manager yahoo.Manager) entities.User {
 	return entities.User{
-		Email:     manager.Email,
-		Name:      manager.Nickname,
-		ManagerID: manager.ManagerID,
-		Nickname:  manager.Nickname,
-		Guid:      manager.GUID,
-		//IsCommissioner: ,
-		ImageURL: manager.ImageURL,
+		Email:          manager.Email,
+		Name:           manager.Nickname,
+		ManagerID:      manager.ManagerID,
+		Nickname:       manager.Nickname,
+		Guid:           manager.GUID,
+		IsCommissioner: intToBoolean(manager.IsCommissioner),
+		ImageURL:       manager.ImageURL,
 		//Teams:          nil,
 		//Commissioned:   nil,
 	}
+}
+
+func intToBoolean(i int) bool {
+	return i == 1
 }
 
 func transformYahooStandingsToStandings(standings *yahoo.LeagueResourcesStandingsResponse) []entities.Team {

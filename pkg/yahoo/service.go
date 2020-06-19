@@ -857,6 +857,7 @@ type Manager struct {
 	Nickname       string `xml:"nickname"`
 	GUID           string `xml:"guid"`
 	IsCurrentLogin string `xml:"is_current_login"`
+	IsCommissioner int    `xml:"is_commissioner"`
 	Email          string `xml:"email"`
 	ImageURL       string `xml:"image_url"`
 }
@@ -1497,7 +1498,8 @@ type LeagueResourcesScoreboard struct {
 					ManagerID      string `json:"manager_id"`
 					Nickname       string `json:"nickname"`
 					GUID           string `json:"guid"`
-					IsCommissioner string `json:"is_commissioner"`
+					IsCommissioner int    `json:"is_commissioner"`
+					ImageURl       string `json:"image_url"`
 				} `json:"managers"`
 				Points struct {
 					CoverageType string `json:"coverage_type"`
@@ -2157,7 +2159,7 @@ type GetLeagueResourcesPlayersStatsResponse struct {
 					AsciiFirst string `xml:"ascii_first"`
 					AsciiLast  string `xml:"ascii_last"`
 				} `xml:"name"`
-				Status                string `xml:"status"`
+				Status                int    `xml:"status"`
 				StatusFull            string `xml:"status_full"`
 				EditorialPlayerKey    string `xml:"editorial_player_key"`
 				EditorialTeamKey      string `xml:"editorial_team_key"`
@@ -2165,7 +2167,7 @@ type GetLeagueResourcesPlayersStatsResponse struct {
 				EditorialTeamAbbr     string `xml:"editorial_team_abbr"`
 				ByeWeeks              struct {
 					Text string `xml:",chardata"`
-					Week string `xml:"week"`
+					Week int    `xml:"week"`
 				} `xml:"bye_weeks"`
 				UniformNumber   string `xml:"uniform_number"`
 				DisplayPosition string `xml:"display_position"`
@@ -2922,7 +2924,7 @@ func (s *Service) GetRosterResourcesPlayers(teamKey string, dateString string) (
 
 /*
 
-	Team Resource
+	TeamKey Resource
 
 */
 

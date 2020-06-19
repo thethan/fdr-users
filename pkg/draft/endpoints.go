@@ -11,17 +11,19 @@ import (
 )
 
 type Endpoints struct {
-	logger         log.Logger
-	service        *Service
-	ImportDraft    endpoint.Endpoint
-	GetLeagueDraft endpoint.Endpoint
+	logger          log.Logger
+	service         *Service
+	ImportDraft     endpoint.Endpoint
+	GetLeagueDraft  endpoint.Endpoint
+	SaveDraftResult endpoint.Endpoint
 }
 
 func NewEndpoints(logger log.Logger, service *Service) Endpoints {
 	e := Endpoints{
-		logger:         logger,
-		ImportDraft:    makeImportDraft(logger, service),
-		GetLeagueDraft: makeGetDraftInfo(logger, service),
+		logger:          logger,
+		ImportDraft:     makeImportDraft(logger, service),
+		GetLeagueDraft:  makeGetDraftInfo(logger, service),
+		SaveDraftResult: makeSaveDraftResult(logger, service),
 	}
 
 	return e
@@ -45,6 +47,20 @@ type LeagueDraftRequest struct {
 	LeagueKey string
 }
 
+type User struct {
+	Email string `json:"email"`
+	Guid  string `json:"guid"`
+	UID   string `json:"uid"`
+}
+
+type SaveDraftResultRequest struct {
+	User   entities.User         `json:"user"`
+	League entities.League       `json:"league"`
+	Player entities.PlayerSeason `json:"player"`
+	Team   entities.Team         `json:"team"`
+	Pick   int                   `json:"pick"`
+}
+
 func makeGetDraftInfo(logger log.Logger, service *Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		span, ctx := apm.StartSpan(ctx, "GetDraftInfo", "endpoint")
@@ -57,7 +73,7 @@ func makeGetDraftInfo(logger log.Logger, service *Service) endpoint.Endpoint {
 		}
 
 		league, results, err := service.ListDraftResults(ctx, req.LeagueKey)
-		if err != nil{
+		if err != nil {
 			return nil, err
 		}
 		teamKeyToIdx := make(map[string]int, len(league.Teams))
@@ -70,5 +86,22 @@ func makeGetDraftInfo(logger log.Logger, service *Service) endpoint.Endpoint {
 		}
 		league.TeamDraftOrder = teams
 		return &DraftResultResponse{DraftResults: results, League: league}, err
+	}
+}
+
+func makeSaveDraftResult(logger log.Logger, service *Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		span, ctx := apm.StartSpan(ctx, "SaveDraftRequest", "endpoint")
+		defer span.End()
+
+		req, ok := request.(*SaveDraftResultRequest)
+		if !ok {
+			level.Error(logger).Log("message", "could not get request")
+			return nil, errors.New("bad request for get draft")
+		}
+
+		service.SaveDraftRequest(ctx, req.User, req.League, req.Team, req.Player, req.Pick)
+
+		return &DraftResultResponse{}, err
 	}
 }
