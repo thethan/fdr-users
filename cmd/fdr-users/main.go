@@ -20,6 +20,8 @@ import (
 	draftTransports "github.com/thethan/fdr-users/pkg/draft/transports"
 	"github.com/thethan/fdr-users/pkg/league"
 	"github.com/thethan/fdr-users/pkg/mongo"
+	"github.com/thethan/fdr-users/pkg/players"
+	playersTransport "github.com/thethan/fdr-users/pkg/players/transports"
 	"github.com/thethan/fdr-users/pkg/yahoo"
 	"go.elastic.co/apm/module/apmgorilla"
 	"net/http"
@@ -174,8 +176,13 @@ func main() {
 	draftService := draft.NewService(logger, mongoRepo)
 	draftEndpoints := draft.NewEndpoints(logger, &draftService)
 
+	// players
+	playerService := players.NewService(logger, mongoRepo)
+	playersEndpoint := players.NewEndpoint(logger, &playerService,  authSvc.NewAuthMiddleware())
+
 	users.MakeHTTPHandler(endpoints, ogGrouter, authSvc.ServerBefore)
 	draftTransports.MakeHTTPHandler(logger, draftEndpoints, ogGrouter, authSvc.ServerBefore)
+	playersTransport.MakeHTTPHandler(logger, playersEndpoint, ogGrouter, authSvc.ServerBefore)
 
 	// Mechanical domain.
 	errc := make(chan error)
@@ -185,7 +192,6 @@ func main() {
 
 	// Interrupt handler.
 	go handlers.InterruptHandler(errc)
-
 
 	_ = ogGrouter.Walk(func(route *mux.Route, router *mux.Router, ancestors []*mux.Route) error {
 		pathTemplate, err := route.GetPathTemplate()
