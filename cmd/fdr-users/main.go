@@ -7,6 +7,7 @@ import (
 	firebaseAuth "firebase.google.com/go/auth"
 	"flag"
 	"fmt"
+	"github.com/caarlos0/env"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	muxhandlers "github.com/gorilla/handlers"
@@ -18,6 +19,7 @@ import (
 	"github.com/thethan/fdr-users/pkg/draft"
 	"github.com/thethan/fdr-users/pkg/draft/repositories"
 	draftTransports "github.com/thethan/fdr-users/pkg/draft/transports"
+	"github.com/thethan/fdr-users/pkg/kubemq"
 	"github.com/thethan/fdr-users/pkg/league"
 	"github.com/thethan/fdr-users/pkg/mongo"
 	"github.com/thethan/fdr-users/pkg/players"
@@ -62,6 +64,12 @@ type Config struct {
 	DebugAddr                  string
 	GRPCAddr                   string
 	ServiceAccountFileLocation string
+}
+
+type KubemqConfig struct {
+	Address  string `env:"KUBEMQ_ADDRESS" envDefault:"kubemq-cluster-grpc.kubemq"`
+	ClientID string `env:"POD_NAME"`
+	Port     int    `env:"KUBEMQ_PORT" envDefault:"50000"`
 }
 
 var logrusLogger = &logrus.Logger{
@@ -168,17 +176,34 @@ func main() {
 	_ = transports.NewServer(logger, logrusLogger, coordinatorEndpoints)
 	endpoints := users.NewEndpoints(logger, &repo, &repo, &importService, authSvc.NewAuthMiddleware(), authSvc.ServerBefore)
 
+	var kubemqConfig KubemqConfig
+	err = env.Parse(&kubemqConfig)
+	if err != err {
+		level.Error(logger).Log("message", "could not parse kubemq config", "error", err)
+		os.Exit(1)
+	}
+
+	kubemqClient, err := kubemq.NewKubeMQClient(ctx, kubemqConfig.Address, kubemqConfig.Port, kubemqConfig.ClientID)
+	if err != nil {
+		level.Error(logger).Log("message", "could initiate kubemq client", "error", err)
+		os.Exit(1)
+	}
+
+	defer kubemqClient.Close()
+
+	kubemqDraftRepo := kubemq.NewDraftRepository(logger, kubemqClient)
+
 	ogGrouter := mux.NewRouter()
 	apmgorilla.Instrument(ogGrouter)
 	transports.NewHTTPServer(logrusLogger, ogGrouter, coordinatorEndpoints, authSvc.ServerBefore)
 
 	// draft
-	draftService := draft.NewService(logger, mongoRepo)
+	draftService := draft.NewService(logger, mongoRepo, &kubemqDraftRepo)
 	draftEndpoints := draft.NewEndpoints(logger, &draftService)
 
 	// players
 	playerService := players.NewService(logger, mongoRepo)
-	playersEndpoint := players.NewEndpoint(logger, &playerService,  authSvc.NewAuthMiddleware())
+	playersEndpoint := players.NewEndpoint(logger, &playerService, authSvc.NewAuthMiddleware())
 
 	users.MakeHTTPHandler(endpoints, ogGrouter, authSvc.ServerBefore)
 	draftTransports.MakeHTTPHandler(logger, draftEndpoints, ogGrouter, authSvc.ServerBefore)

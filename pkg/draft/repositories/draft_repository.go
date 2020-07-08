@@ -3,6 +3,7 @@ package repositories
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/go-kit/kit/log"
@@ -166,23 +167,24 @@ func (m MongoRepository) GetAvailablePlayersForDraft(ctx context.Context, gameID
 
 	collection := m.client.Database(database).Collection(newTable)
 	findOptions := &options.AggregateOptions{}
-	elements := make([]bson.E, 0)
+	elements := make([]bson.E, 0, 4)
 
 	elements = append(elements, bson.E{Key: "draft_results", Value: bson.M{"$exists": false}})
 	elements = append(elements, bson.E{Key: "league_key", Value: leagueKey})
 
 	if len(eligiblePositions) > 0 {
-		elements = append(elements, bson.E{Key: "player.eligiblepositions", Value: bson.M{"$in": bson.A{eligiblePositions}}})
+		elements = append(elements, bson.E{Key: "player.eligiblepositions", Value: bson.M{"$in": eligiblePositions}})
 	}
 
 	if search != "" {
 		elements = append(elements, bson.E{Key: "player.name.full", Value: bson.M{"$regex": fmt.Sprintf(".*%s.*", search)}})
 	}
 
+	skip := offset * limit
 	pipeline := mongo.Pipeline{
 		bson.D{{"$match", elements}},
+		bson.D{{"$skip", skip}},
 		bson.D{{"$limit", limit}},
-		bson.D{{"$skip", offset}},
 	}
 
 	cursor, err := collection.Aggregate(ctx, pipeline, findOptions)
@@ -198,20 +200,6 @@ func (m MongoRepository) GetAvailablePlayersForDraft(ctx context.Context, gameID
 	}
 
 	return players, nil
-	//for cursor.Next(ctx) {
-	//	var draftResult entities.PlayerSeason
-	//	bsonBytes, err := bson.Marshal(&bsonM)
-	//	if err != nil {
-	//		return nil, err
-	//	}
-	//
-	//	err = bson.Unmarshal(bsonBytes, &draftResult)
-	//	if err != nil {
-	//		return nil, err
-	//	}
-	//	draftResults[idx] = draftResult
-	//}
-
 }
 
 func (m MongoRepository) GetDraftResults(ctx context.Context, leagueKey string) ([]entities.DraftResult, error) {
@@ -253,6 +241,35 @@ func (m MongoRepository) GetDraftResults(ctx context.Context, leagueKey string) 
 	return draftResults, nil
 }
 
+func (m MongoRepository) GetTeamDraftResultsByTeam(ctx context.Context, leagueKey string) (map[string][]entities.DraftResult, error) {
+	span, ctx := apm.StartSpan(ctx, "GetTeamDraftResultsByTeam", "repository.Mongo")
+	defer span.End()
+
+	draftResults, err := m.GetDraftResults(ctx, leagueKey)
+	if err != nil {
+		level.Error(m.logger).Log("message", "error in getting draft results", "err", err)
+		return nil, err
+	}
+	if len(draftResults) == 0 {
+		return map[string][]entities.DraftResult{}, nil
+	}
+
+	teams := make(map[string][]entities.DraftResult, len(draftResults[0].League.Teams))
+	for _, draftResult := range draftResults {
+		teamResults, ok := teams[draftResult.TeamKey]
+		if !ok {
+			teamResults = newPlayerSeasonSlice()
+		}
+		teams[draftResult.TeamKey] = append(teamResults, draftResult)
+	}
+
+	return teams, nil
+}
+
+func newPlayerSeasonSlice() []entities.DraftResult {
+	return make([]entities.DraftResult, 0)
+}
+
 // {"teams.manager":{ $elemMatch: {"guid":"DPPQCXCRV75Z2LKJW5YRC7RAYM"}}}
 func (m MongoRepository) SaveDraftResultFromUser(ctx context.Context, league entities.League, user entities.User, team entities.Team, player entities.PlayerSeason, pick, round int) (*entities.DraftResult, error) {
 	span, ctx := apm.StartSpan(ctx, "SaveDraftResult", "repository.Mongo")
@@ -270,7 +287,6 @@ func (m MongoRepository) SaveDraftResultFromUser(ctx context.Context, league ent
 		GameID:    league.Game.GameID,
 		Player:    []*entities.PlayerSeason{&player},
 	}
-
 
 	err := m.SaveDraftResult(ctx, draftResult)
 	if err != nil {
@@ -290,8 +306,10 @@ func (m MongoRepository) SaveDraftResultFromUser(ctx context.Context, league ent
 		return nil, err
 	}
 
-
-	level.Debug(m.logger).Log("message", "insert draft result", "upsert_id", insertResult.UpsertedID, "player_key", draftResult.PlayerKey)
+	level.Debug(m.logger).Log("message", "insert draft result", "upsert_count", insertResult.UpsertedCount, "upsert_id", insertResult.UpsertedID, "player_key", draftResult.PlayerKey)
+	if insertResult.ModifiedCount == 0 {
+		return nil, errors.New("did not update")
+	}
 	return &draftResult, nil
 }
 
@@ -311,9 +329,7 @@ func (m MongoRepository) SaveDraftResult(ctx context.Context, draftResult entiti
 		level.Error(m.logger).Log("error", err, "could not make query", "guid", draftResult.UserGUID)
 
 	}
-	_, err = collection.UpdateOne(ctx, bson.M{"league_key": draftResult.LeagueKey, "player_key": draftResult.PlayerKey}, bson.D{{"$set", draftD}}, &options.UpdateOptions{
-		Upsert: aws.Bool(true),
-	})
+	_, err = collection.InsertOne(ctx, draftD, &options.InsertOneOptions{})
 
 	if err != nil {
 		level.Error(m.logger).Log("error", err, "could not execute query", "guid", draftResult.UserGUID, "query", draftD)
@@ -540,9 +556,8 @@ func (m *MongoRepository) SaveLeague(ctx context.Context, leagueGroupd *entities
 			Upsert: aws.Bool(true),
 		}
 
-		upRes := collection.FindOneAndReplace(ctx, leagueFilter, league, &updateOptions)
+		_ = collection.FindOneAndReplace(ctx, leagueFilter, league, &updateOptions)
 
-		fmt.Println(upRes)
 	}
 
 	return leagueGroupd, nil

@@ -71,6 +71,12 @@ func MakeHTTPHandler(logger log.Logger, endpoints draft.Endpoints, m *mux.Router
 		EncodeHTTPDraftResult,
 		serverOptionsAuth...,
 	))
+	m.Methods(http.MethodGet).Path("/{"+leagueIdParam+"}/teams/roster").Handler(httptransport.NewServer(
+		endpoints.GetTeamRoster,
+		DecodeHTTPGetLeaugueDraft,
+		EncodeHTTPDraftTeamRostersResponse,
+		serverOptionsAuth...,
+	))
 	return m
 }
 
@@ -201,6 +207,21 @@ func DecodeHTTPGetLeaugueDraft(ctx context.Context, r *http.Request) (interface{
 // the response as JSON to the response writer. Primarily useful in a server.
 func EncodeHTTPDraftResults(_ context.Context, w http.ResponseWriter, response interface{}) error {
 	res, ok := response.(*draft.DraftResultResponse)
+	if !ok {
+		return errors.New("could not get user Credentials Response ")
+	}
+	bytesJson, err := json.Marshal(&res)
+	if err != nil {
+		return err
+	}
+	w.Write(bytesJson)
+	return nil
+}
+
+// EncodeHTTPGenericResponse is a transport/http.EncodeResponseFunc that encodes
+// the response as JSON to the response writer. Primarily useful in a server.
+func EncodeHTTPDraftTeamRostersResponse(_ context.Context, w http.ResponseWriter, response interface{}) error {
+	res, ok := response.(*draft.DraftTeamRostersResponse)
 	if !ok {
 		return errors.New("could not get user Credentials Response ")
 	}

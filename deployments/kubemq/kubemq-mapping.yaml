@@ -1,0 +1,44 @@
+---
+apiVersion: getambassador.io/v2
+kind:  Mapping
+metadata:
+  name:  kubemq-mapping
+spec:
+  prefix: /mq/
+  service: kubemq-cluster-rest.kubemq:9090
+  use_websocket: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  creationTimestamp: "2020-06-21T05:33:57Z"
+  labels:
+    kubemq.cluster.name: kubemq-cluster
+  name: kubemq-cluster-rest
+  namespace: kubemq
+  ownerReferences:
+    - apiVersion: core.k8s.kubemq.io/v1alpha1
+      blockOwnerDeletion: true
+      controller: true
+      kind: KubemqCluster
+      name: kubemq-cluster
+      uid: 26d613bb-5e6f-470b-a088-14639e79786e
+  resourceVersion: "15893700"
+  selfLink: /api/v1/namespaces/kubemq/services/kubemq-cluster-rest
+  uid: 4c45a073-4714-4e02-bf80-1907eced9c94
+spec:
+  ports:
+    - name: rest-port
+      port: 9090
+      protocol: TCP
+      targetPort: 9090
+    - name: rest-port-
+      nodePort: 32099
+      port: 9090
+
+  selector:
+    kubemq.cluster.name: kubemq-cluster
+  sessionAffinity: None
+  type: ClusterIP
+status:
+  loadBalancer: {}

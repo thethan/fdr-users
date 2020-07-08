@@ -113,7 +113,9 @@ func TestMongoRepository_GetDraftResults(t *testing.T) {
 
 }
 
-func TestMongoRepository_GetAvailablePlayersForDraft(t *testing.T) {
+
+
+func TestMongoRepository_GetTeamDraftResultsByTeam(t *testing.T) {
 	logger := test_helpers.LogrusLogger(t)
 	client, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"))
 	assert.Nil(t, err)
@@ -121,6 +123,25 @@ func TestMongoRepository_GetAvailablePlayersForDraft(t *testing.T) {
 		t.FailNow()
 	}
 	leagueKey := "390.l.705710"
+
+	mongoRepo := NewMongoRepository(logger, client, "fdr", "draft", "fdr_user", "roster")
+	draftResults, err := mongoRepo.GetTeamDraftResultsByTeam(context.TODO(), leagueKey)
+	assert.Nil(t, err)
+	assert.Equal(t, 10, len(draftResults))
+
+
+	t.FailNow()
+
+}
+
+func TestMongoRepository_GetAvailablePlayersForDraft(t *testing.T) {
+	logger := test_helpers.LogrusLogger(t)
+	client, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"))
+	assert.Nil(t, err)
+	if t.Failed() {
+		t.FailNow()
+	}
+	leagueKey := "399.l.19481"
 	mongoRepo := NewMongoRepository(logger, client, "fdr", "draft", "fdr_user", "roster")
 	t.Run("something", func(t *testing.T) {
 
@@ -132,7 +153,17 @@ func TestMongoRepository_GetAvailablePlayersForDraft(t *testing.T) {
 			assert.NotEqual(t, "", players[idx].Player.PlayerID)
 			assert.Nil(t, players[idx].DraftResult)
 		}
-		t.FailNow()
+
+
+		players, err = mongoRepo.GetAvailablePlayersForDraft(context.TODO(), 390, leagueKey, 150, 1, []string{}, "")
+		assert.Nil(t, err)
+		assert.Equal(t, 150, len(players))
+		for idx := range players {
+			assert.NotNil(t, players[idx].Player.PlayerID)
+			assert.NotEqual(t, "", players[idx].Player.PlayerID)
+			assert.Nil(t, players[idx].DraftResult)
+		}
+
 	})
 	t.Run("get players by positions", func(t *testing.T) {
 		players, err := mongoRepo.GetAvailablePlayersForDraft(context.TODO(), 390, leagueKey, 150, 0, []string{"QB", "WR"}, "")

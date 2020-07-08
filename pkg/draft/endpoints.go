@@ -16,6 +16,7 @@ type Endpoints struct {
 	ImportDraft     endpoint.Endpoint
 	GetLeagueDraft  endpoint.Endpoint
 	SaveDraftResult endpoint.Endpoint
+	GetTeamRoster   endpoint.Endpoint
 }
 
 func NewEndpoints(logger log.Logger, service *Service) Endpoints {
@@ -24,6 +25,7 @@ func NewEndpoints(logger log.Logger, service *Service) Endpoints {
 		ImportDraft:     makeImportDraft(logger, service),
 		GetLeagueDraft:  makeGetDraftInfo(logger, service),
 		SaveDraftResult: makeSaveDraftResult(logger, service),
+		GetTeamRoster:   makeGetTeamDraftRoster(logger, service),
 	}
 
 	return e
@@ -41,6 +43,10 @@ func makeImportDraft(logger log.Logger, service *Service) endpoint.Endpoint {
 type DraftResultResponse struct {
 	League       *entities.League       `json:"league"`
 	DraftResults []entities.DraftResult `json:"draft_results"`
+}
+
+type DraftTeamRostersResponse struct {
+	Teams map[string]entities.Roster `json:"rosters"`
 }
 
 type LeagueDraftRequest struct {
@@ -89,6 +95,26 @@ func makeGetDraftInfo(logger log.Logger, service *Service) endpoint.Endpoint {
 	}
 }
 
+func makeGetTeamDraftRoster(logger log.Logger, service *Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		span, ctx := apm.StartSpan(ctx, "GetTeamDraftRoster", "endpoint")
+		defer span.End()
+
+		req, ok := request.(*LeagueDraftRequest)
+		if !ok {
+			level.Error(logger).Log("message", "could not get request")
+			return nil, errors.New("bad request for get draft")
+		}
+
+		rosters, err := service.GetTeamsDraftResults(ctx, req.LeagueKey)
+		if err != nil {
+			return nil, err
+		}
+
+		return &DraftTeamRostersResponse{Teams: rosters}, err
+	}
+}
+
 func makeSaveDraftResult(logger log.Logger, service *Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		span, ctx := apm.StartSpan(ctx, "SaveDraftRequest", "endpoint")
@@ -100,8 +126,12 @@ func makeSaveDraftResult(logger log.Logger, service *Service) endpoint.Endpoint 
 			return nil, errors.New("bad request for get draft")
 		}
 
-		service.SaveDraftRequest(ctx, req.User, req.League, req.Team, req.Player, req.Pick)
-
-		return &DraftResultResponse{}, err
+		result, err := service.SaveDraftRequest(ctx, req.User, req.League, req.Team, req.Player, req.Pick)
+		if err != nil {
+			return nil, err
+		}
+		return &DraftResultResponse{
+			DraftResults: []entities.DraftResult{*result},
+		}, err
 	}
 }

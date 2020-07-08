@@ -2,7 +2,6 @@ package draft
 
 import (
 	"context"
-	"fmt"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/thethan/fdr-users/pkg/draft/entities"
@@ -10,8 +9,8 @@ import (
 	"math"
 )
 
-func NewService(logger log.Logger, repository draftRepository, ) Service {
-	return Service{logger: logger, draftRepo: repository}
+func NewService(logger log.Logger, repository draftRepository, broadcastRepo broadCastRepo) Service {
+	return Service{logger: logger, draftRepo: repository, broadCastRepo: broadcastRepo}
 }
 
 type draftRepository interface {
@@ -19,11 +18,17 @@ type draftRepository interface {
 	GetLeague(ctx context.Context, leagueKey string) (entities.League, error)
 	ImportAllAvailablePlayers(ctx context.Context, gameID int, leagueKey string) error
 	SaveDraftResultFromUser(ctx context.Context, league entities.League, user entities.User, team entities.Team, player entities.PlayerSeason, pick, round int) (*entities.DraftResult, error)
+	GetTeamDraftResultsByTeam(ctx context.Context, leagueKey string) (map[string][]entities.DraftResult, error)
+}
+
+type broadCastRepo interface {
+	BroadCastDraftResult(ctx context.Context, league entities.League, user entities.User, team entities.Team, draftResult entities.DraftResult, pick, round int) error
 }
 
 type Service struct {
 	logger    log.Logger
 	draftRepo draftRepository
+	broadCastRepo
 }
 
 func (service *Service) ListDraftResults(ctx context.Context, leagueKey string) (*entities.League, []entities.DraftResult, error) {
@@ -45,6 +50,71 @@ func (service *Service) ListDraftResults(ctx context.Context, leagueKey string) 
 	}
 
 	return &league, results, err
+}
+
+func (service *Service) GetTeamsDraftResults(ctx context.Context, leagueKey string) (map[string]entities.Roster, error) {
+	span, ctx := apm.StartSpan(ctx, "GetTeamsDraftResults", "service")
+	defer func() {
+		span.End()
+	}()
+
+	league, err := service.draftRepo.GetLeague(ctx, leagueKey)
+	if err != nil {
+		level.Error(service.logger).Log("message", "could not get league", "error", err)
+		return nil, err
+	}
+	results, err := service.draftRepo.GetTeamDraftResultsByTeam(ctx, leagueKey)
+	if err != nil {
+		level.Error(service.logger).Log("message", "could not get draft results", "error", err)
+
+		return nil, err
+	}
+
+	rosters := make(map[string]entities.Roster, len(league.Teams))
+
+	for teamKey, draftResults := range results {
+		roster := makeRoster(league)
+		teamRoster := buildTeamRoster(draftResults, roster)
+		rosters[teamKey] = teamRoster
+	}
+
+	return rosters, err
+}
+
+func makeRoster(league entities.League) entities.Roster {
+	teamRoster := make(map[string]entities.RosterSlot, len(league.Settings.RosterPositions))
+	for _, pos := range league.Settings.RosterPositions {
+		teamRoster[pos.Position] = entities.RosterSlot{Count: pos.Count, DraftResults: []entities.DraftResult{}}
+	}
+	return entities.Roster{Roster: teamRoster}
+}
+
+func buildTeamRoster(teamDraftResults []entities.DraftResult, roster entities.Roster) entities.Roster {
+	for _, teamDraftResult := range teamDraftResults {
+		rosterSlotKey := teamDraftResult.Player[0].EligiblePositions[0]
+		if roster.CanAddResult(rosterSlotKey) {
+			roster = addToRoster(rosterSlotKey, roster, teamDraftResult)
+			continue
+		}
+
+		if (rosterSlotKey == "RB" || rosterSlotKey == "WR" || rosterSlotKey == "TE") && roster.CanAddResult("W/R/T") {
+			rosterSlotKey = "W/R/T"
+			roster = addToRoster(rosterSlotKey, roster, teamDraftResult)
+			continue
+		}
+
+		if !roster.CanAddResult(rosterSlotKey) {
+			// add roster to bench
+			rosterSlotKey = "BN"
+			roster = addToRoster(rosterSlotKey, roster, teamDraftResult)
+		}
+	}
+	return roster
+}
+
+func addToRoster(rosterSlotKey string, roster entities.Roster, result entities.DraftResult) entities.Roster {
+	roster.AddResult(rosterSlotKey, result)
+	return roster
 }
 
 func (service *Service) OpenDraft(ctx context.Context, leagueKey string) error {
@@ -88,24 +158,18 @@ func (service *Service) SaveDraftRequest(ctx context.Context, user entities.User
 		return nil, err
 	}
 	round := getRound(pick, league)
-	fmt.Printf("%v \n", round)
+
 	draftResult, err := service.draftRepo.SaveDraftResultFromUser(ctx, league, user, team, player, pick, int(round))
 	if err != nil {
+		level.Error(service.logger).Log("message", "error in updating draft result", "error", err)
 
-		return nil, err
+		return nil, &ErrorUpdateDraft{}
+	}
+
+	err = service.broadCastRepo.BroadCastDraftResult(ctx, league, user, team, *draftResult, pick, int(round))
+	if err != nil {
+		level.Error(service.logger).Log("message", "error in broadcasting", "error", err)
+		return nil, &ErrorUpdateDraft{}
 	}
 	return draftResult, err
-	//return &entities.DraftResult{
-	//	UserGUID:  leaguePlayer.DraftResult.UserGUID,
-	//	PlayerKey: leaguePlayer.DraftResult.PlayerKey,
-	//	PlayerID:  leaguePlayer.DraftResult.PlayerID,
-	//	LeagueKey: leaguePlayer.DraftResult.LeagueKey,
-	//	TeamKey:   leaguePlayer.DraftResult.TeamKey,
-	//	Round:     leaguePlayer.DraftResult.Round,
-	//	Pick:      leaguePlayer.DraftResult.Pick,
-	//	Timestamp: leaguePlayer.DraftResult.Timestamp,
-	//	GameID:    leaguePlayer.League.Game.GameID,
-	//	//LeaguePlayer: &leaguePlayer,
-	//	Player: []*entities.PlayerSeason{&leaguePlayer.Player},
-	//}, err
 }
