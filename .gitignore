@@ -2,3 +2,4 @@ vendor
 .idea
 deployments/fdr-users/values.yaml
 serviceAccountKey.json
+credentials.json
