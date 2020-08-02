@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/go-kit/kit/log"
+	"github.com/thethan/fdr-users/pkg/draft/entities"
 	"github.com/thethan/fdr-users/pkg/players"
 	"io"
 	"io/ioutil"
@@ -35,6 +36,7 @@ import (
 
 const contentType = "application/json; charset=utf-8"
 const leagueIdParam = "leagueId"
+const userGuid = "userGuid"
 
 var (
 	_ = fmt.Sprint
@@ -59,9 +61,17 @@ func MakeHTTPHandler(logger log.Logger, endpoints players.Endpoints, m *mux.Rout
 	serverOptionsAuth := append(serverOptions, httptransport.ServerBefore(authServerBefore))
 
 	m = m.PathPrefix("/leagues").Subrouter()
-	m.Methods(http.MethodGet).Path("/{"+leagueIdParam+"}/players").Handler(httptransport.NewServer(
+	m.Methods(http.MethodGet).Path("/{" + leagueIdParam + "}/players").Handler(httptransport.NewServer(
 		endpoints.GetAvailablePlayers,
 		DecodeHTTPGetAvailablePlayersForLeague,
+		EncodeHTTPGetAvailablePlayers,
+		serverOptionsAuth...,
+	))
+	return m
+
+	m.Methods(http.MethodPut).Path("/{+" + userGuid + "}/{" + leagueIdParam + "}/players").Handler(httptransport.NewServer(
+		endpoints.SaveUsersDraftOrder,
+		DecodeHTTPSavePlayersOrders,
 		EncodeHTTPGetAvailablePlayers,
 		serverOptionsAuth...,
 	))
@@ -118,8 +128,6 @@ func (h httpError) Headers() http.Header {
 
 // Server Decode
 
-
-
 // EncodeHTTPGenericResponse is a transport/http.EncodeResponseFunc that encodes
 // the response as JSON to the response writer. Primarily useful in a server.
 func EncodeHTTPGenericResponse(_ context.Context, w http.ResponseWriter, response interface{}) error {
@@ -150,9 +158,6 @@ func headersToContext(ctx context.Context, r *http.Request) context.Context {
 
 	return ctx
 }
-
-
-
 
 func DecodeHTTPGetAvailablePlayersForLeague(ctx context.Context, r *http.Request) (interface{}, error) {
 	defer r.Body.Close()
@@ -208,10 +213,61 @@ func DecodeHTTPGetAvailablePlayersForLeague(ctx context.Context, r *http.Request
 		req.Positions = pos
 	}
 
-
 	return &req, err
 }
 
+// EncodeHTTPGenericResponse is a transport/http.EncodeResponseFunc that encodes
+// the response as JSON to the response writer. Primarily useful in a server.
+func EncodeHTTPGetPlayersOrders(_ context.Context, w http.ResponseWriter, response interface{}) error {
+	res, ok := response.(*entities.UserPlayerPreference)
+	if !ok {
+		return errors.New("could not get user player order ")
+	}
+	bytesJson, err := json.Marshal(&res)
+	if err != nil {
+		return err
+	}
+	w.Write(bytesJson)
+	return nil
+}
+
+
+func DecodeHTTPSavePlayersOrders(ctx context.Context, r *http.Request) (interface{}, error) {
+	defer r.Body.Close()
+	var req entities.UserPlayerPreference
+	buf, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		return nil, errors.Wrapf(err, "cannot read body of http request")
+	}
+	if len(buf) > 0 {
+		// AllowUnknownFields stops the unmarshaler from failing if the JSON contains unknown fields.
+		if err = json.Unmarshal(buf, &req); err != nil {
+			const size = 8196
+			if len(buf) > size {
+				buf = buf[:size]
+			}
+			return nil, httpError{errors.Wrapf(err, "request body '%s': cannot parse non-json request body", buf),
+				http.StatusBadRequest,
+				nil,
+			}
+		}
+	}
+
+	pathParams := mux.Vars(r)
+	leagueKey, ok := pathParams[leagueIdParam]
+	if !ok {
+		return nil, errors.New("bad request")
+	}
+
+	gameIDs := strings.Split(".l.", leagueKey)
+	if len(gameIDs) == 0 {
+		return nil, errors.New("could not get game id from league")
+	}
+	req.GameID = gameIDs[0]
+	req.LeagueKey = leagueKey
+
+	return &req, err
+}
 
 // EncodeHTTPGenericResponse is a transport/http.EncodeResponseFunc that encodes
 // the response as JSON to the response writer. Primarily useful in a server.

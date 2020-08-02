@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/stretchr/testify/assert"
+	"github.com/thethan/fdr-users/pkg/draft/entities"
 	"github.com/thethan/fdr-users/pkg/mongo"
 	"github.com/thethan/fdr-users/pkg/test_helpers"
 	"os"
@@ -13,7 +14,7 @@ import (
 func TestMongoRepository_GetTeamsForManagers(t *testing.T) {
 
 	logger := test_helpers.LogrusLogger(t)
-	client, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"))
+	client, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
 	assert.Nil(t, err)
 	if t.Failed() {
 		t.FailNow()
@@ -27,7 +28,7 @@ func TestMongoRepository_GetTeamsForManagers(t *testing.T) {
 
 func TestMongoRepository_GetPlayers(t *testing.T) {
 	logger := test_helpers.LogrusLogger(t)
-	client, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"))
+	client, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
 	assert.Nil(t, err)
 	if t.Failed() {
 		t.FailNow()
@@ -45,7 +46,7 @@ func TestMongoRepository_GetPlayers(t *testing.T) {
 
 func TestMongoRepository_GetTeamsForLeague(t *testing.T) {
 	logger := test_helpers.LogrusLogger(t)
-	client, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"))
+	client, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
 	assert.Nil(t, err)
 	if t.Failed() {
 		t.FailNow()
@@ -61,7 +62,7 @@ func TestMongoRepository_GetTeamsForLeague(t *testing.T) {
 
 func TestMongoRepository_SaveDraftOrder(t *testing.T) {
 	logger := test_helpers.LogrusLogger(t)
-	client, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"))
+	client, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
 	assert.Nil(t, err)
 	if t.Failed() {
 		t.FailNow()
@@ -90,7 +91,7 @@ func TestMongoRepository_SaveDraftOrder(t *testing.T) {
 
 func TestMongoRepository_GetDraftResults(t *testing.T) {
 	logger := test_helpers.LogrusLogger(t)
-	client, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"))
+	client, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
 	assert.Nil(t, err)
 	if t.Failed() {
 		t.FailNow()
@@ -113,11 +114,9 @@ func TestMongoRepository_GetDraftResults(t *testing.T) {
 
 }
 
-
-
 func TestMongoRepository_GetTeamDraftResultsByTeam(t *testing.T) {
 	logger := test_helpers.LogrusLogger(t)
-	client, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"))
+	client, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
 	assert.Nil(t, err)
 	if t.Failed() {
 		t.FailNow()
@@ -129,19 +128,19 @@ func TestMongoRepository_GetTeamDraftResultsByTeam(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, 10, len(draftResults))
 
-
 	t.FailNow()
 
 }
 
 func TestMongoRepository_GetAvailablePlayersForDraft(t *testing.T) {
 	logger := test_helpers.LogrusLogger(t)
-	client, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"))
+	client, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
 	assert.Nil(t, err)
 	if t.Failed() {
 		t.FailNow()
 	}
 	leagueKey := "399.l.19481"
+
 	mongoRepo := NewMongoRepository(logger, client, "fdr", "draft", "fdr_user", "roster")
 	t.Run("something", func(t *testing.T) {
 
@@ -153,7 +152,6 @@ func TestMongoRepository_GetAvailablePlayersForDraft(t *testing.T) {
 			assert.NotEqual(t, "", players[idx].Player.PlayerID)
 			assert.Nil(t, players[idx].DraftResult)
 		}
-
 
 		players, err = mongoRepo.GetAvailablePlayersForDraft(context.TODO(), 390, leagueKey, 150, 1, []string{}, "")
 		assert.Nil(t, err)
@@ -182,7 +180,7 @@ func TestMongoRepository_GetAvailablePlayersForDraft(t *testing.T) {
 
 func TestMongoRepository_ImportLeagueAvailablePlayers(t *testing.T) {
 	logger := test_helpers.LogrusLogger(t)
-	client, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"))
+	client, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
 	assert.Nil(t, err)
 	if t.Failed() {
 		t.FailNow()
@@ -198,6 +196,56 @@ func TestMongoRepository_ImportLeagueAvailablePlayers(t *testing.T) {
 
 }
 
+func TestMongoRepository_SaveUserPlayerPreference(t *testing.T) {
+	logger := test_helpers.LogrusLogger(t)
+	client, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
+	assert.Nil(t, err)
+	if t.Failed() {
+		t.FailNow()
+	}
+	leagueKey := "399.l.19481"
+	userGuid := "MFG5HMFDHC634Q7W2FPKJBVTKY"
+
+	mongoRepo := NewMongoRepository(logger, client, "fdr", "draft", "fdr_user", "roster")
+	assert.Nil(t, err)
+	preference := entities.UserPlayerPreference{
+		LeagueKey:  leagueKey,
+		GameID:     "399",
+		UserID:     userGuid,
+		DoNotDraft: []string{},
+		Preference: []string{"913901"},
+		Positions:  map[string][]string{},
+	}
+
+
+	err = mongoRepo.SaveUserPlayerPreference(context.TODO(), preference)
+	assert.Nil(t, err)
+	t.Log(err)
+	t.FailNow()
+
+}
+
+func TestMongoRepository_GetUserPreference(t *testing.T) {
+	logger := test_helpers.LogrusLogger(t)
+	client, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
+	assert.Nil(t, err)
+	if t.Failed() {
+		t.FailNow()
+	}
+	leagueKey := "399.l.19481"
+	userGuid := "MFG5HMFDHC634Q7W2FPKJBVTKY"
+
+	mongoRepo := NewMongoRepository(logger, client, "fdr", "draft", "fdr_user", "roster")
+	assert.Nil(t, err)
+
+	pref, err := mongoRepo.GetUserPlayerPreference(context.TODO(), userGuid, leagueKey)
+	assert.Nil(t, err)
+	t.Log(err)
+	t.FailNow()
+	assert.Equal(t, leagueKey, pref.LeagueKey)
+	assert.Equal(t, userGuid, pref.UserID)
+	assert.True(t, len(pref.Preference) > 1,)
+}
 
 func TestMongoRepository_SaveDraftResults2(t *testing.T) {
 	//logger := test_helpers.LogrusLogger(t)
@@ -227,7 +275,5 @@ func TestMongoRepository_SaveDraftResults2(t *testing.T) {
 	//	t.Fail()
 	//	t.FailNow()
 	//}
-
-
 
 }

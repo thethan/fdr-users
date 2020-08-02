@@ -16,6 +16,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/transport/http"
 	"github.com/thethan/fdr-users/pkg/league"
+	"github.com/thethan/fdr-users/pkg/users/info"
 	pb "github.com/thethan/fdr_proto"
 	"go.elastic.co/apm"
 )
@@ -46,7 +47,7 @@ type Endpoints struct {
 
 // Endpoints
 
-func NewEndpoints(logger log.Logger, user GetUserInfo, saveInfo SaveUserInfo, importer *league.Importer, authMiddleware endpoint.Middleware, serverBefore http.RequestFunc) Endpoints {
+func NewEndpoints(logger log.Logger, user info.GetUserInfo, saveInfo SaveUserInfo, importer *league.Importer, authMiddleware endpoint.Middleware, serverBefore http.RequestFunc) Endpoints {
 	// Business domain.
 	var service usersService
 	{
@@ -123,7 +124,7 @@ func MakeLoginEndpoint(s pb.UsersServer) endpoint.Endpoint {
 	}
 }
 
-func MakeCredentialsEndpoint(s pb.UsersServer, user GetUserInfo) endpoint.Endpoint {
+func MakeCredentialsEndpoint(s pb.UsersServer, user info.GetUserInfo) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		span, ctx := apm.StartSpan(ctx, "CredentialsEndpoint", "endpoint")
 		defer span.End()

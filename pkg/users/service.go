@@ -6,9 +6,10 @@ import (
 	firebaseAuth "firebase.google.com/go/auth"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/thethan/fdr-users/pkg/auth"
+	"github.com/thethan/fdr-users/pkg/consts"
 	"github.com/thethan/fdr-users/pkg/league"
 	"github.com/thethan/fdr-users/pkg/users/entities"
+	"github.com/thethan/fdr-users/pkg/users/info"
 	"github.com/thethan/fdr-users/pkg/yahoo"
 	"go.elastic.co/apm"
 	"google.golang.org/grpc/codes"
@@ -19,17 +20,13 @@ import (
 	pb "github.com/thethan/fdr_proto"
 )
 
-type GetUserInfo interface {
-	GetCredentialInformation(ctx context.Context, session string) (entities.User, error)
-}
-
 type SaveUserInfo interface {
 	SaveYahooCredential(ctx context.Context, uid, accessToken string, guid string) (entities.User, error)
 	SaveYahooInformation(ctx context.Context, uid, accessToken, refreshToken, email, guid string) (entities.User, error)
 }
 
 // NewService returns a naïve, stateless implementation of Service.
-func NewService(logger log.Logger, info GetUserInfo, saveUserInfo SaveUserInfo, importer league.NewImporterService) usersService {
+func NewService(logger log.Logger, info info.GetUserInfo, saveUserInfo SaveUserInfo, importer league.NewImporterService) usersService {
 	return usersService{
 		logger:       logger,
 		userInfo:     info,
@@ -40,7 +37,7 @@ func NewService(logger log.Logger, info GetUserInfo, saveUserInfo SaveUserInfo, 
 
 type usersService struct {
 	logger       log.Logger
-	userInfo     GetUserInfo
+	userInfo     info.GetUserInfo
 	saveUserInfo SaveUserInfo
 	importer     league.NewImporterService
 }
@@ -189,7 +186,7 @@ func (s usersService) GetUsersLeagues(ctx context.Context, in *UserCredentialReq
 	defer span.End()
 
 	var resp UserCredentialResponse
-	tokenInterface := ctx.Value(auth.FirebaseToken)
+	tokenInterface := ctx.Value(consts.FirebaseToken)
 
 	token, ok := tokenInterface.(*firebaseAuth.Token)
 	if !ok {

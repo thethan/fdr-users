@@ -15,13 +15,14 @@ ENV GITHUB_TOKEN "1c909977e86be4c8b2a9ab4a495731787f2713c2"
 
 RUN git config --global url."https://thethan:${GITHUB_TOKEN}@github.com".insteadOf "https://github.com"
 RUN mkdir /certs/
-ADD serviceAccountKey.json /certs/serviceAccountKey.json
 RUN go mod vendor
 RUN go build -o exec cmd/fdr-users/main.go
 
 
 FROM base
-EXPOSE 80 8080 8082
+EXPOSE 8080 8081 8082
+RUN mkdir /certs/
+ADD serviceAccountKey.json /certs/serviceAccountKey.json
 COPY --from=builder  /go/src/github.com/thethan/fdr-users/exec .
 CMD ./exec
 

@@ -7,10 +7,11 @@ data:
   ELASTIC_APM_SERVER_URL: {{ .Values.apm.url | quote }}
   ELASTIC_APM_SECRET_TOKEN: {{ .Values.apm.token | quote }}
 
-  MONGO_USERNAME: {{ .Values.mongo.username }}
-  MONGO_PASSWORD: {{ .Values.mongo.password }}
-  MONGO_HOST: {{ .Values.mongo.host }}
+  MONGO_USERNAME: {{ .Values.mongo.username | quote }}
+  MONGO_PASSWORD: {{ .Values.mongo.password | quote }}
+  MONGO_HOST: {{ .Values.mongo.host | quote }}
+  MONGO_PORT: {{ .Values.mongo.port | quote }}
 
-  KUBEMQ_SERVICE: {{ .Values.kubemq.service }}
-  KUBEMQ_PORT: {{ .Values.kubemq.port }}
+  KUBEMQ_SERVICE: {{ .Values.kubemq.service | quote }}
+  KUBEMQ_PORT: {{ .Values.kubemq.port | quote }}
 

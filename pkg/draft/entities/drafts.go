@@ -19,7 +19,7 @@ type Draft struct {
 //	Timestamp time.Time    `json:"timestamp" bson:"timestamp"`
 //}
 type Roster struct {
-	Roster map[string]RosterSlot
+	Roster map[string]RosterSlot `json:"roster"`
 }
 
 func (r Roster) CanAddResult(key string) bool {

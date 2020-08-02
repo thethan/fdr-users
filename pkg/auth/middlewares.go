@@ -2,16 +2,19 @@ package auth
 
 import (
 	"context"
+	"errors"
 	firebaseAuth "firebase.google.com/go/auth"
 	"github.com/go-kit/kit/endpoint"
 	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
+	grpcAuth "github.com/grpc-ecosystem/go-grpc-middleware/auth"
+	"github.com/grpc-ecosystem/go-grpc-middleware/tags"
+	"github.com/thethan/fdr-users/pkg/consts"
 	"github.com/thethan/fdr-users/pkg/firebase"
+	"github.com/thethan/fdr-users/pkg/users/info"
 	"go.elastic.co/apm"
 	"net/http"
 	"strings"
-
-	grpcAuth "github.com/grpc-ecosystem/go-grpc-middleware/auth"
-	"github.com/grpc-ecosystem/go-grpc-middleware/tags"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -44,18 +47,18 @@ func (as AuthService) ServerAuthentication(ctx context.Context, logger log.Logge
 			return nil, err
 		}
 
-		return as.addFirebaseTokenToContext(ctx, tokenString)
+		return as.AddFirebaseTokenToContext(ctx, tokenString)
 	}
 	return serverAuthentication
 
 }
 
-func (as AuthService) addFirebaseTokenToContext(ctx context.Context, tokenString string) (context.Context, error){
+func (as AuthService) AddFirebaseTokenToContext(ctx context.Context, tokenString string) (context.Context, error) {
 	ctx, err := as.parseToken(ctx, tokenString)
 	if err != nil {
 		return nil, status.Errorf(codes.Unauthenticated, "invalid auth token: %v", err)
 	}
-	tokenInterface := ctx.Value(FirebaseToken)
+	tokenInterface := ctx.Value(consts.FirebaseToken)
 
 	token, ok := tokenInterface.(*firebaseAuth.Token)
 	if !ok {
@@ -66,31 +69,77 @@ func (as AuthService) addFirebaseTokenToContext(ctx context.Context, tokenString
 	return ctx, nil
 }
 
-const FirebaseToken string = "firebase_token"
 const BearerToken string = "bearer"
+const User string = "user"
 
 func (a AuthService) ServerBefore(ctx context.Context, req *http.Request) context.Context {
-	span, ctx :=apm.StartSpan(ctx, "authService", "ServerBefore")
+	span, ctx := apm.StartSpan(ctx, "authService", "ServerBefore")
 	defer span.End()
+
 	authHeader := req.Header.Get("Authorization")
 	authHeader = strings.Replace(authHeader, "Bearer ", "", 1)
 	ctx = context.WithValue(ctx, BearerToken, authHeader)
 	return ctx
 }
 
+func (a AuthService) UserInformationToContext(userInfo info.GetUserInfo) endpoint.Middleware {
+	return func(next endpoint.Endpoint) endpoint.Endpoint {
+		return func(ctx context.Context, request interface{}) (interface{}, error) {
+			span, ctx := apm.StartSpan(ctx, "UserInformationToContext", "middleware")
+			defer span.End()
+
+			tokenInterface := ctx.Value(consts.FirebaseToken)
+
+			token, ok := tokenInterface.(*firebaseAuth.Token)
+			if !ok {
+				return nil, errors.New("could not authenticate user")
+			}
+
+			user, _ := userInfo.GetCredentialInformation(ctx, token.UID)
+
+			ctx = context.WithValue(ctx, User, user)
+			return next(ctx, request)
+		}
+	}
+}
+
 func (a AuthService) NewAuthMiddleware() endpoint.Middleware {
 	return func(next endpoint.Endpoint) endpoint.Endpoint {
 		return func(ctx context.Context, request interface{}) (interface{}, error) {
-			span, ctx :=apm.StartSpan(ctx, "NewAuthMiddleware", "middleware")
+			span, ctx := apm.StartSpan(ctx, "NewAuthMiddleware", "middleware")
 			defer span.End()
 
 			tokenIface := ctx.Value(BearerToken)
 			tokenString := tokenIface.(string)
 
-			ctx, err := a.addFirebaseTokenToContext(ctx, tokenString)
+			ctx, err := a.AddFirebaseTokenToContext(ctx, tokenString)
 			if err != nil {
 				return nil, err
 			}
+			return next(ctx, request)
+		}
+	}
+}
+
+func (a AuthService) GetUserInfoFromContextMiddleware(userInfo info.GetUserInfo) endpoint.Middleware {
+	return func(next endpoint.Endpoint) endpoint.Endpoint {
+		return func(ctx context.Context, request interface{}) (interface{}, error) {
+
+			tokenInterface := ctx.Value(consts.FirebaseToken)
+
+			token, ok := tokenInterface.(*firebaseAuth.Token)
+			if !ok {
+				return nil, status.Errorf(codes.Unauthenticated, "invalid auth token")
+			}
+
+			user, err := userInfo.GetCredentialInformation(ctx, token.UID)
+			if err != nil {
+				level.Error(a.logger).Log("message", "could not get auth", "error", err)
+				return nil, status.Errorf(codes.Unauthenticated, "invalid auth token: %v", err)
+			}
+
+			ctx = context.WithValue(ctx, User, &user)
+
 			return next(ctx, request)
 		}
 	}

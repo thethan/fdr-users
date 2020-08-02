@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"github.com/go-kit/kit/log"
 	"github.com/thethan/fdr-users/pkg/draft"
+	"github.com/thethan/fdr-users/pkg/players/transports"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -56,28 +57,47 @@ func MakeHTTPHandler(logger log.Logger, endpoints draft.Endpoints, m *mux.Router
 		httptransport.ServerAfter(httptransport.SetContentType(contentType)),
 	}
 	serverOptions = append(serverOptions, options...)
-	serverOptionsAuth := append(serverOptions, httptransport.ServerBefore(authServerBefore))
+	serverOptionsAuth := append(serverOptions, httptransport.ServerBefore(authServerBefore), httptransport.ServerBefore(AddLeagueServerBefore(logger)))
 
 	m = m.PathPrefix("/leagues").Subrouter()
-	m.Methods(http.MethodGet).Path("/{"+leagueIdParam+"}/draft").Handler(httptransport.NewServer(
+	m.Methods(http.MethodGet).Path("/{" + leagueIdParam + "}/draft").Handler(httptransport.NewServer(
 		endpoints.GetLeagueDraft,
 		DecodeHTTPGetLeaugueDraft,
 		EncodeHTTPDraftResults,
 		serverOptionsAuth...,
 	))
-	m.Methods(http.MethodPost).Path("/{"+leagueIdParam+"}/draft").Handler(httptransport.NewServer(
+	m.Methods(http.MethodPost).Path("/{" + leagueIdParam + "}/draft").Handler(httptransport.NewServer(
 		endpoints.SaveDraftResult,
 		DecodeHTTPSaveDraftResult,
 		EncodeHTTPDraftResult,
 		serverOptionsAuth...,
 	))
-	m.Methods(http.MethodGet).Path("/{"+leagueIdParam+"}/teams/roster").Handler(httptransport.NewServer(
+	m.Methods(http.MethodGet).Path("/{" + leagueIdParam + "}/teams/roster").Handler(httptransport.NewServer(
 		endpoints.GetTeamRoster,
 		DecodeHTTPGetLeaugueDraft,
 		EncodeHTTPDraftTeamRostersResponse,
 		serverOptionsAuth...,
 	))
+	m.Methods(http.MethodPost).Path("/{" + leagueIdParam + "}/players/preference").Handler(httptransport.NewServer(
+		endpoints.SaveUserPlayerPreference,
+		transports.DecodeHTTPSavePlayersOrders,
+		transports.EncodeHTTPGetPlayersOrders ,
+		serverOptionsAuth...,
+	))
 	return m
+}
+
+func AddLeagueServerBefore(logger log.Logger) httptransport.RequestFunc {
+	return func(ctx context.Context, r *http.Request) context.Context {
+		pathParams := mux.Vars(r)
+		leagueKey, ok := pathParams[leagueIdParam]
+		if !ok {
+			return ctx
+		}
+
+		ctx = context.WithValue(ctx, "league_key", leagueKey)
+		return ctx
+	}
 }
 
 // ErrorEncoder writes the error to the ResponseWriter, by default a content
@@ -130,8 +150,6 @@ func (h httpError) Headers() http.Header {
 
 // Server Decode
 
-
-
 // EncodeHTTPGenericResponse is a transport/http.EncodeResponseFunc that encodes
 // the response as JSON to the response writer. Primarily useful in a server.
 func EncodeHTTPGenericResponse(_ context.Context, w http.ResponseWriter, response interface{}) error {
@@ -162,9 +180,6 @@ func headersToContext(ctx context.Context, r *http.Request) context.Context {
 
 	return ctx
 }
-
-
-
 
 func DecodeHTTPGetLeaugueDraft(ctx context.Context, r *http.Request) (interface{}, error) {
 	defer r.Body.Close()
@@ -201,8 +216,6 @@ func DecodeHTTPGetLeaugueDraft(ctx context.Context, r *http.Request) (interface{
 	return &req, err
 }
 
-
-
 // EncodeHTTPGenericResponse is a transport/http.EncodeResponseFunc that encodes
 // the response as JSON to the response writer. Primarily useful in a server.
 func EncodeHTTPDraftResults(_ context.Context, w http.ResponseWriter, response interface{}) error {
@@ -232,8 +245,6 @@ func EncodeHTTPDraftTeamRostersResponse(_ context.Context, w http.ResponseWriter
 	w.Write(bytesJson)
 	return nil
 }
-
-
 
 func DecodeHTTPSaveDraftResult(ctx context.Context, r *http.Request) (interface{}, error) {
 	defer r.Body.Close()
@@ -270,7 +281,6 @@ func DecodeHTTPSaveDraftResult(ctx context.Context, r *http.Request) (interface{
 
 	return &req, err
 }
-
 
 // EncodeHTTPGenericResponse is a transport/http.EncodeResponseFunc that encodes
 // the response as JSON to the response writer. Primarily useful in a server.

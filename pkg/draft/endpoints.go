@@ -6,26 +6,31 @@ import (
 	"github.com/go-kit/kit/endpoint"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/thethan/fdr-users/pkg/auth"
 	"github.com/thethan/fdr-users/pkg/draft/entities"
+	entities2 "github.com/thethan/fdr-users/pkg/users/entities"
 	"go.elastic.co/apm"
 )
 
 type Endpoints struct {
-	logger          log.Logger
-	service         *Service
-	ImportDraft     endpoint.Endpoint
-	GetLeagueDraft  endpoint.Endpoint
-	SaveDraftResult endpoint.Endpoint
-	GetTeamRoster   endpoint.Endpoint
+	logger                   log.Logger
+	service                  *Service
+	ImportDraft              endpoint.Endpoint
+	GetLeagueDraft           endpoint.Endpoint
+	SaveDraftResult          endpoint.Endpoint
+	GetTeamRoster            endpoint.Endpoint
+	SaveUserPlayerPreference endpoint.Endpoint
+	GetUserPlayerPreference  endpoint.Endpoint
 }
 
-func NewEndpoints(logger log.Logger, service *Service) Endpoints {
+func NewEndpoints(logger log.Logger, service *Service, authService *auth.AuthService, authMiddleware endpoint.Middleware, getUserInfoMiddleWare endpoint.Middleware) Endpoints {
 	e := Endpoints{
 		logger:          logger,
 		ImportDraft:     makeImportDraft(logger, service),
-		GetLeagueDraft:  makeGetDraftInfo(logger, service),
-		SaveDraftResult: makeSaveDraftResult(logger, service),
-		GetTeamRoster:   makeGetTeamDraftRoster(logger, service),
+		GetLeagueDraft:  authMiddleware(makeGetDraftInfo(logger, service)),
+		SaveDraftResult: authMiddleware(getUserInfoMiddleWare(makeSaveDraftResult(logger, service))),
+		GetTeamRoster:   authMiddleware(makeGetTeamDraftRoster(logger, service)),
+		SaveUserPlayerPreference: authMiddleware(getUserInfoMiddleWare(makeSaveUserPlayerPreference(logger, service))),
 	}
 
 	return e
@@ -117,7 +122,7 @@ func makeGetTeamDraftRoster(logger log.Logger, service *Service) endpoint.Endpoi
 
 func makeSaveDraftResult(logger log.Logger, service *Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		span, ctx := apm.StartSpan(ctx, "SaveDraftRequest", "endpoint")
+		span, ctx := apm.StartSpan(ctx, "SaveDraftResult", "endpoint")
 		defer span.End()
 
 		req, ok := request.(*SaveDraftResultRequest)
@@ -133,5 +138,52 @@ func makeSaveDraftResult(logger log.Logger, service *Service) endpoint.Endpoint 
 		return &DraftResultResponse{
 			DraftResults: []entities.DraftResult{*result},
 		}, err
+	}
+}
+
+func makeSaveUserPlayerPreference(logger log.Logger, service *Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		span, ctx := apm.StartSpan(ctx, "SaveUserPlayerPreference", "endpoint")
+		defer span.End()
+
+		req, ok := request.(*entities.UserPlayerPreference)
+		if !ok {
+			level.Error(logger).Log("message", "could not get request")
+			return nil, errors.New("bad request for get draft")
+		}
+
+		userInterface := ctx.Value(auth.User)
+		user, ok := userInterface.(*entities2.User)
+		if !ok {
+			return nil, errors.New("bad request")
+		}
+
+		req.UserID = user.GUID
+
+		err = service.SaveUserPlayerPreference(ctx, *req)
+		if err != nil {
+			return nil, err
+		}
+		return req, err
+	}
+}
+
+const LeagueKey = "league_key"
+
+func NewUserHasAccessToDraftMiddleware(logger log.Logger, a *auth.AuthService) endpoint.Middleware {
+	return func(next endpoint.Endpoint) endpoint.Endpoint {
+		return func(ctx context.Context, request interface{}) (interface{}, error) {
+			span, ctx := apm.StartSpan(ctx, "NewAuthMiddleware", "middleware")
+			defer span.End()
+
+			tokenIface := ctx.Value(LeagueKey)
+			tokenString := tokenIface.(string)
+
+			ctx, err := a.AddFirebaseTokenToContext(ctx, tokenString)
+			if err != nil {
+				return nil, err
+			}
+			return next(ctx, request)
+		}
 	}
 }

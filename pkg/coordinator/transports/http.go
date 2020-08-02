@@ -19,6 +19,8 @@ func NewHTTPServer(fieldLogger logrus.FieldLogger, m *mux.Router, endpoints coor
 		httptransport.ServerBefore(authServerBefore),
 	}
 
+
+
 	m.Methods(http.MethodGet).PathPrefix("/import/leagues").HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.WriteHeader(http.StatusAlreadyReported)
 	})

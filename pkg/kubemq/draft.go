@@ -19,6 +19,7 @@ type Repository struct {
 	logger log.Logger
 }
 
+
 func NewDraftRepository(logger log.Logger, client *kubemq.Client) Repository {
 	return Repository{
 		client: client,
@@ -31,15 +32,16 @@ func buildDraftChannel(leagueKey string) string {
 }
 
 type BroadcastDraftResult struct {
-	Message     string               `json:"message"`
-	DraftOpen   bool                 `json:"draft_open"`
-	Team        entities.Team        `json:"team"`
-	League      entities.League      `json:"league"`
-	User        entities.User        `json:"user"`
-	DraftResult entities.DraftResult `json:"draft_result"`
+	Message     string                     `json:"message"`
+	DraftOpen   bool                       `json:"draft_open"`
+	Team        entities.Team              `json:"team"`
+	League      entities.League            `json:"league"`
+	User        entities.User              `json:"user"`
+	DraftResult entities.DraftResult       `json:"draft_result"`
+	Rosters     map[string]entities.Roster `json:"rosters"`
 }
 
-func (r *Repository) BroadCastDraftResult(ctx context.Context, league entities.League, user entities.User, team entities.Team, draftResult entities.DraftResult, pick, round int) error {
+func (r *Repository) BroadCastDraftResult(ctx context.Context, league entities.League, user entities.User, team entities.Team, draftResult entities.DraftResult, pick, round int, rosters map[string]entities.Roster) error {
 	span, ctx := apm.StartSpan(ctx, "BroadCastDraftResult", "kubemq")
 	defer span.End()
 
@@ -48,6 +50,7 @@ func (r *Repository) BroadCastDraftResult(ctx context.Context, league entities.L
 		League:      league,
 		User:        user,
 		DraftResult: draftResult,
+		Rosters:     rosters,
 	}
 
 	event := r.client.ES()
@@ -58,7 +61,7 @@ func (r *Repository) BroadCastDraftResult(ctx context.Context, league entities.L
 	event.AddTag("player_id", strconv.Itoa(draftResult.PlayerID))
 
 	channelName := buildDraftChannel(league.LeagueKey)
-	channelName = "draft-399.l.19481"
+	channelName = "draft-"+league.LeagueKey
 
 	data, err := json.Marshal(&broadcast)
 	if err != nil {
@@ -69,11 +72,11 @@ func (r *Repository) BroadCastDraftResult(ctx context.Context, league entities.L
 	level.Debug(r.logger).Log("message", "sending draft result to kubeqm", "pick", pick, "round", round, "league_key", league.LeagueKey, "channel_name", channelName)
 
 	result, err :=
-		event.SetId(fmt.Sprintf("%s-%d", channelName,  draftResult.Pick)).
+		event.SetId(fmt.Sprintf("%s-%d", channelName, draftResult.Pick)).
 			SetChannel(channelName).
-		SetMetadata(fmt.Sprintf("%s-%d-%d", league.LeagueKey, draftResult.Round, draftResult.Pick)).
-		SetBody(data).
-		Send(ctx)
+			SetMetadata(fmt.Sprintf("%s-%d-%d", league.LeagueKey, draftResult.Round, draftResult.Pick)).
+			SetBody(data).
+			Send(ctx)
 
 	if err != nil {
 		level.Debug(r.logger).Log("message", "error sending draft result to kubeqm", "pick", pick, "round", round, "league_key", league.LeagueKey, "channel_name", channelName)

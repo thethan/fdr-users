@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"github.com/go-kit/kit/log"
 	"github.com/sirupsen/logrus"
-	"github.com/thethan/fdr-users/pkg/auth"
+	"github.com/thethan/fdr-users/pkg/consts"
 
 	"github.com/thethan/fdr-users/pkg/yahoo"
 	"go.elastic.co/apm"
@@ -44,7 +44,7 @@ func (s Service) importUserLeagues(ctx context.Context, req interface{}) (res in
 
 	// get user from context
 
-	tokenInterface := ctx.Value(auth.FirebaseToken)
+	tokenInterface := ctx.Value(consts.FirebaseToken)
 	fmt.Printf("Token Iface %v\n", tokenInterface)
 
 	token, ok := tokenInterface.(*firebaseAuth.Token)

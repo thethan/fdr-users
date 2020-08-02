@@ -19,10 +19,12 @@ type draftRepository interface {
 	ImportAllAvailablePlayers(ctx context.Context, gameID int, leagueKey string) error
 	SaveDraftResultFromUser(ctx context.Context, league entities.League, user entities.User, team entities.Team, player entities.PlayerSeason, pick, round int) (*entities.DraftResult, error)
 	GetTeamDraftResultsByTeam(ctx context.Context, leagueKey string) (map[string][]entities.DraftResult, error)
+	SaveUserPlayerPreference(ctx context.Context, preference entities.UserPlayerPreference) error
+	GetUserPlayerPreference(ctx context.Context, userGUID, leagueKey string) (entities.UserPlayerPreference, error)
 }
 
 type broadCastRepo interface {
-	BroadCastDraftResult(ctx context.Context, league entities.League, user entities.User, team entities.Team, draftResult entities.DraftResult, pick, round int) error
+	BroadCastDraftResult(ctx context.Context, league entities.League, user entities.User, team entities.Team, draftResult entities.DraftResult, pick, round int, rosters map[string]entities.Roster) error
 }
 
 type Service struct {
@@ -63,7 +65,12 @@ func (service *Service) GetTeamsDraftResults(ctx context.Context, leagueKey stri
 		level.Error(service.logger).Log("message", "could not get league", "error", err)
 		return nil, err
 	}
-	results, err := service.draftRepo.GetTeamDraftResultsByTeam(ctx, leagueKey)
+
+	return service.buildRosters(ctx, league)
+}
+
+func (service Service) buildRosters(ctx context.Context, league entities.League) (map[string]entities.Roster, error) {
+	results, err := service.draftRepo.GetTeamDraftResultsByTeam(ctx, league.LeagueKey)
 	if err != nil {
 		level.Error(service.logger).Log("message", "could not get draft results", "error", err)
 
@@ -77,8 +84,7 @@ func (service *Service) GetTeamsDraftResults(ctx context.Context, leagueKey stri
 		teamRoster := buildTeamRoster(draftResults, roster)
 		rosters[teamKey] = teamRoster
 	}
-
-	return rosters, err
+	return rosters, nil
 }
 
 func makeRoster(league entities.League) entities.Roster {
@@ -166,10 +172,46 @@ func (service *Service) SaveDraftRequest(ctx context.Context, user entities.User
 		return nil, &ErrorUpdateDraft{}
 	}
 
-	err = service.broadCastRepo.BroadCastDraftResult(ctx, league, user, team, *draftResult, pick, int(round))
+	rosters, err := service.buildRosters(ctx, league)
+	if err != nil {
+		return nil, err
+	}
+
+	err = service.broadCastRepo.BroadCastDraftResult(ctx, league, user, team, *draftResult, pick, int(round), rosters)
 	if err != nil {
 		level.Error(service.logger).Log("message", "error in broadcasting", "error", err)
 		return nil, &ErrorUpdateDraft{}
 	}
 	return draftResult, err
+}
+
+func (service *Service) SaveUserPlayerPreference(ctx context.Context, preference entities.UserPlayerPreference) error {
+	span, ctx := apm.StartSpan(ctx, "SaveUserPlayerPreference", "service")
+	defer func(span *apm.Span) {
+		span.Context.SetTag("user_guid", preference.UserID)
+		span.Context.SetTag("league_key", preference.LeagueKey)
+		span.End()
+	}(span)
+
+	return service.draftRepo.SaveUserPlayerPreference(ctx, preference)
+}
+
+func (service *Service) GetUserPlayerPreference(ctx context.Context, userGuid, leagueKey string) (entities.UserPlayerPreference, error) {
+	span, ctx := apm.StartSpan(ctx, "GetUserPlayerPreference", "service")
+	defer func(span *apm.Span) {
+		span.Context.SetTag("user_guid", userGuid)
+		span.Context.SetTag("league_key", leagueKey)
+		span.End()
+	}(span)
+	//
+	//wg := &sync.WaitGroup{}
+	//wg.Add(2)
+	//wg.Wait()
+
+	pref, err := service.draftRepo.GetUserPlayerPreference(ctx, userGuid, leagueKey)
+	if err != nil {
+		return pref, err
+	}
+
+	return pref, err
 }

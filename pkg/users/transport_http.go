@@ -363,7 +363,7 @@ func DecodeHTTPSaveCredentialRequest(_ context.Context, r *http.Request) (interf
 	//		AllowUnknownFields: true,
 	//	}
 	//	if err = unmarshaller.Unmarshal(bytes.NewBuffer(buf), &req); err != nil {
-	//		const size = 8196
+	//		consts size = 8196
 	//		if len(buf) > size {
 	//			buf = buf[:size]
 	//		}

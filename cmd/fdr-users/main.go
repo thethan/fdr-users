@@ -19,6 +19,7 @@ import (
 	"github.com/thethan/fdr-users/pkg/draft"
 	"github.com/thethan/fdr-users/pkg/draft/repositories"
 	draftTransports "github.com/thethan/fdr-users/pkg/draft/transports"
+	"github.com/thethan/fdr-users/pkg/guests"
 	"github.com/thethan/fdr-users/pkg/kubemq"
 	"github.com/thethan/fdr-users/pkg/league"
 	"github.com/thethan/fdr-users/pkg/mongo"
@@ -67,7 +68,7 @@ type Config struct {
 }
 
 type KubemqConfig struct {
-	Address  string `env:"KUBEMQ_ADDRESS" envDefault:"kubemq-cluster-grpc.kubemq"`
+	Address  string `env:"KUBEMQ_SERVICE" envDefault:"kubemq-cluster-grpc.kubemq"`
 	ClientID string `env:"POD_NAME"`
 	Port     int    `env:"KUBEMQ_PORT" envDefault:"50000"`
 }
@@ -165,7 +166,7 @@ func main() {
 
 	yahooProvider := yahoo.NewService(logger, &repo)
 
-	mongoClient, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"))
+	mongoClient, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
 	if err != nil {
 		logger.Log("message", "error in initializing mongo client", "error", err)
 		os.Exit(1)
@@ -194,23 +195,41 @@ func main() {
 	kubemqDraftRepo := kubemq.NewDraftRepository(logger, kubemqClient)
 
 	ogGrouter := mux.NewRouter()
+
+	ogGrouter.Methods(http.MethodGet).PathPrefix("/hambone").HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		_, _ = writer.Write([]byte("hambone"))
+		writer.WriteHeader(http.StatusAccepted)
+
+	})
+
 	apmgorilla.Instrument(ogGrouter)
 	transports.NewHTTPServer(logrusLogger, ogGrouter, coordinatorEndpoints, authSvc.ServerBefore)
 
 	// draft
 	draftService := draft.NewService(logger, mongoRepo, &kubemqDraftRepo)
-	draftEndpoints := draft.NewEndpoints(logger, &draftService)
+	draftEndpoints := draft.NewEndpoints(logger, &draftService, &authSvc, authSvc.NewAuthMiddleware(), authSvc.GetUserInfoFromContextMiddleware(&repo))
 
 	// players
-	playerService := players.NewService(logger, mongoRepo)
-	playersEndpoint := players.NewEndpoint(logger, &playerService, authSvc.NewAuthMiddleware())
+	playerService := players.NewService(logger, mongoRepo,)
+	playersEndpoint := players.NewEndpoint(logger, &playerService, authSvc.NewAuthMiddleware(),  authSvc.GetUserInfoFromContextMiddleware(&repo))
+
+	// guests
+	guestsMongoRepo := guests.NewMongoRepository(logger, mongoClient)
+	guestService := guests.NewService(logger, kubemqClient, guestsMongoRepo)
+	guestEndpoints := guests.NewEndpoints(logger, guestService,  authSvc.NewAuthMiddleware())
 
 	users.MakeHTTPHandler(endpoints, ogGrouter, authSvc.ServerBefore)
 	draftTransports.MakeHTTPHandler(logger, draftEndpoints, ogGrouter, authSvc.ServerBefore)
 	playersTransport.MakeHTTPHandler(logger, playersEndpoint, ogGrouter, authSvc.ServerBefore)
+	guests.MakeHTTPHandler(logger, guestEndpoints, ogGrouter, authSvc.ServerBefore)
 
 	// Mechanical domain.
 	errc := make(chan error)
+	go func() {
+		errc <- guestService.Start(ctx)
+	}()
+
+	defer guestService.Close()
 
 	apm.DefaultTracer.SetLogger(logrusLogger)
 	logrusLogger.AddHook(&apmlogrus.Hook{})
@@ -250,7 +269,10 @@ func main() {
 			ln, _ := net.Listen("tcp", DefaultConfig.HTTPAddr)
 
 			return http.Serve(ln,
-				muxhandlers.CORS(muxhandlers.AllowedHeaders([]string{"X-Requested-With", "Content-Type", "Authorization"}),
+				muxhandlers.CORS(muxhandlers.AllowedHeaders([]string{
+				"X-Requested-With",
+				"Content-Type",
+				"Authorization"}),
 					muxhandlers.AllowedMethods([]string{"GET", "POST", "PUT", "HEAD", "OPTIONS"}), muxhandlers.AllowedOrigins([]string{"*"}))(ogGrouter))
 		}, func(err error) {
 			return

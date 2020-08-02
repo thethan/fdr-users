@@ -7,28 +7,28 @@ metadata:
   annotations:
     getambassador.io/config: |
       ---
-      apiVersion: ambassador/v1
+      apiVersion: getambassador/v2
       kind: Mapping
       host: {{ .Values.ambassador.host }}
       grpc: true
-      prefix: "/grpc/users/"
+      prefix: /grpc/
       name: {{ include "fdr-users.fullname" . }}-grpc-mapping
       service: {{ include "fdr-users.fullname" . }}:{{ .Values.service.grpc }}
       ---
-      apiVersion: ambassador/v1
+      apiVersion: getambassador/v2
       kind: Mapping
       host: {{ .Values.ambassador.host }}
-      grpc: true
-      prefix: "/users/"
+      grpc: false
+      prefix: /api/
       name: {{ include "fdr-users.fullname" . }}-http-mapping
       service: {{ include "fdr-users.fullname" . }}:{{ .Values.service.port }}
-       cors:
-         origins: *
-         methods: POST, GET, OPTIONS
-         headers: Content-Type
-         credentials: true
-         exposed_headers: X-Custom-Header
-         max_age: "86400"
+      cors:
+        origins: *
+        methods: POST, GET, OPTIONS
+        headers: Content-Type
+        credentials: true
+        exposed_headers: X-Custom-Header
+        max_age: "86400"
 spec:
   type: {{ .Values.service.type }}
   ports:
@@ -42,3 +42,21 @@ spec:
       name: grpc
   selector:
     {{- include "fdr-users.selectorLabels" . | nindent 4 }}
+{{/*---*/}}
+{{/*apiVersion: getambassador.io/v2*/}}
+{{/*kind:  Mapping*/}}
+{{/*metadata:*/}}
+{{/*  name:  catch-all*/}}
+{{/*spec:*/}}
+{{/*  host: {{ .Values.ambassador.host }}*/}}
+
+{{/*  prefix: /api/*/}}
+{{/*  name: {{ include "fdr-users.fullname" . }}-http-mapping*/}}
+{{/*  service: {{ include "fdr-users.fullname" . }}:{{ .Values.service.port }}*/}}
+{{/*  cors:*/}}
+{{/*    origins: **/}}
+{{/*    methods: POST, GET, OPTIONS*/}}
+{{/*    headers: Content-Type*/}}
+{{/*    credentials: true*/}}
+{{/*    exposed_headers: X-Custom-Header*/}}
+{{/*    max_age: "86400"*/}}
