@@ -224,7 +224,7 @@ func (m MongoRepository) SaveUserPlayerPreference(ctx context.Context, preferenc
 	res := bson.M{"$set": preference}
 	filter := bson.M{"league_key": preference.LeagueKey, "user_guid": preference.UserID}
 	_, err := collection.UpdateOne(ctx, filter, res, &options.UpdateOptions{
-		Upsert:                   aws.Bool(true),
+		Upsert: aws.Bool(true),
 	})
 
 	return err
@@ -330,7 +330,7 @@ func (m MongoRepository) SaveDraftResultFromUser(ctx context.Context, league ent
 	filter := bson.M{"player._id": player.PlayerKey}
 	insertResult, err := collection.UpdateOne(ctx, filter, res)
 	if err != nil {
-		level.Error(m.logger).Log("error", err, "could not execute query", "guid", draftResult.UserGUID, "league_key", league.LeagueKey)
+		level.Error(m.logger).Log("error", err, "message","could not execute query", "guid", draftResult.UserGUID, "league_key", league.LeagueKey)
 		return nil, err
 	}
 
@@ -354,13 +354,13 @@ func (m MongoRepository) SaveDraftResult(ctx context.Context, draftResult entiti
 	var draftD bson.D
 	err = bson.Unmarshal(draftDBytes, &draftD)
 	if err != nil {
-		level.Error(m.logger).Log("error", err, "could not make query", "guid", draftResult.UserGUID)
+		level.Error(m.logger).Log("error", err, "message", "could not make query", "guid", draftResult.UserGUID)
 
 	}
 	_, err = collection.InsertOne(ctx, draftD, &options.InsertOneOptions{})
 
 	if err != nil {
-		level.Error(m.logger).Log("error", err, "could not execute query", "guid", draftResult.UserGUID, "query", draftD)
+		level.Error(m.logger).Log("error", err,  "message", "could not execute query", "guid", draftResult.UserGUID, "query", draftD)
 		return err
 	}
 	return nil
@@ -431,6 +431,28 @@ func (m MongoRepository) GetLeague(ctx context.Context, leagueKey string) (entit
 	}
 	var league entities.League
 	err = res.Decode(&league)
+	return league, err
+}
+//
+func (m MongoRepository) SaveLeague(ctx context.Context, league entities.League) (entities.League, error) {
+	span, ctx := apm.StartSpan(ctx, "GetLeague", "repository.Mongo")
+	defer span.End()
+
+	collection := m.client.Database(database).Collection(leaguesCollection)
+	var findQuert bson.M
+	queryString := fmt.Sprintf(`{"league_key": "%s"}`, league.LeagueKey)
+	err := json.Unmarshal([]byte(queryString), &findQuert)
+	if err != nil {
+		level.Error(m.logger).Log("error", err, "could not make query", "league_key", league.LeagueKey, "query", queryString)
+		return entities.League{}, err
+	}
+
+	_, err = collection.UpdateOne(ctx, findQuert, league)
+	if err != nil {
+		level.Error(m.logger).Log("error", err, "could not make query", "league_key", league.LeagueKey, "query", queryString)
+		return entities.League{}, err
+	}
+
 	return league, err
 }
 
@@ -555,7 +577,7 @@ func (m MongoRepository) GetTeamsForManagers(ctx context.Context, guid string) (
 	return leagues, nil
 }
 
-func (m *MongoRepository) SaveLeague(ctx context.Context, leagueGroupd *entities.LeagueGroup) (*entities.LeagueGroup, error) {
+func (m *MongoRepository) SaveLeagueLeagueGroup(ctx context.Context, leagueGroupd *entities.LeagueGroup) (*entities.LeagueGroup, error) {
 	span, ctx := apm.StartSpan(ctx, "CreateLeague", "repository.Mongo")
 	defer span.End()
 

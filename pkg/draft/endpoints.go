@@ -21,16 +21,20 @@ type Endpoints struct {
 	GetTeamRoster            endpoint.Endpoint
 	SaveUserPlayerPreference endpoint.Endpoint
 	GetUserPlayerPreference  endpoint.Endpoint
+	OpenDraft                endpoint.Endpoint
+	ShuffleDraftOrder        endpoint.Endpoint
 }
 
 func NewEndpoints(logger log.Logger, service *Service, authService *auth.AuthService, authMiddleware endpoint.Middleware, getUserInfoMiddleWare endpoint.Middleware) Endpoints {
 	e := Endpoints{
-		logger:          logger,
-		ImportDraft:     makeImportDraft(logger, service),
-		GetLeagueDraft:  authMiddleware(makeGetDraftInfo(logger, service)),
-		SaveDraftResult: authMiddleware(getUserInfoMiddleWare(makeSaveDraftResult(logger, service))),
-		GetTeamRoster:   authMiddleware(makeGetTeamDraftRoster(logger, service)),
+		logger:                   logger,
+		ImportDraft:              makeImportDraft(logger, service),
+		GetLeagueDraft:           authMiddleware(makeGetDraftInfo(logger, service)),
+		SaveDraftResult:          authMiddleware(getUserInfoMiddleWare(makeSaveDraftResult(logger, service))),
+		GetTeamRoster:            authMiddleware(makeGetTeamDraftRoster(logger, service)),
 		SaveUserPlayerPreference: authMiddleware(getUserInfoMiddleWare(makeSaveUserPlayerPreference(logger, service))),
+		OpenDraft:                authMiddleware(getUserInfoMiddleWare(makeOpenDraft(logger, service))),
+		ShuffleDraftOrder:        authMiddleware(getUserInfoMiddleWare(makeShuffle(logger, service))),
 	}
 
 	return e
@@ -165,6 +169,35 @@ func makeSaveUserPlayerPreference(logger log.Logger, service *Service) endpoint.
 			return nil, err
 		}
 		return req, err
+	}
+}
+
+func makeOpenDraft(logger log.Logger, service *Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		span, ctx := apm.StartSpan(ctx, "makeOpenDraft", "endpoint")
+		defer span.End()
+
+
+		req, ok := request.(*OpenDraftRequest)
+		if !ok {
+			return nil, errors.New("Could not get request")
+		}
+		league, err := service.OpenDraft(ctx, req.LeagueID)
+		return league, err
+	}
+}
+
+func makeShuffle(logger log.Logger, service *Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		span, ctx := apm.StartSpan(ctx, "makeShuffle", "endpoint")
+		defer span.End()
+
+		req, ok := request.(*ShuffleDraftOrderRequest)
+		if !ok {
+			return nil, errors.New("Could not get request")
+		}
+		league, err := service.ShuffleOrder(ctx, req.LeagueID)
+		return league, err
 	}
 }
 

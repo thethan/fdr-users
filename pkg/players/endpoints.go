@@ -76,16 +76,17 @@ func makeNewGetAvailablePlayers(logger log.Logger, service *Service, ) endpoint.
 		}
 		wg := &sync.WaitGroup{}
 
-		wg.Add(2)
-
 		playerMap := make(map[string]entities.LeaguePlayer, len(players))
 		playerKeys := make([]string, len(players))
 		playerKeyToIdx := make(map[string]int, len(players))
 		playersDoNotDraft := make([]string, 0, len(preference.DoNotDraft))
 		playersPref := make([]string, 0, len(preference.Preference))
+		playersPrefMap := make(map[string]int, len(preference.Preference))
+		playersDNDMap := make(map[string]int, len(preference.DoNotDraft))
 		playersAvail := make([]string, 0, len(preference.Available))
 		indexesToRemove := make([]int, 0)
 
+		wg.Add(2)
 		go func(wg *sync.WaitGroup) {
 			defer wg.Done()
 			for idx := range players {
@@ -100,15 +101,15 @@ func makeNewGetAvailablePlayers(logger log.Logger, service *Service, ) endpoint.
 				playerMap[player.Player.PlayerKey] = player
 			}
 		}(wg)
-
 		wg.Wait()
 
-		wg.Add(3)
+		wg.Add(2)
 		go func(wg *sync.WaitGroup) {
 			defer wg.Done()
 			for _, playerKey := range preference.DoNotDraft {
 				_, ok := playerMap[playerKey]
 				if ok {
+					playersDNDMap[playerKey] = len(playersDoNotDraft)
 					playersDoNotDraft = append(playersDoNotDraft, playerKey)
 					indexesToRemove = append(indexesToRemove, playerKeyToIdx[playerKey])
 				}
@@ -120,35 +121,44 @@ func makeNewGetAvailablePlayers(logger log.Logger, service *Service, ) endpoint.
 			for _, playerKey := range preference.Preference {
 				_, ok := playerMap[playerKey]
 				if ok {
+					playersPrefMap[playerKey] = len(playersPref)
+
 					playersPref = append(playersPref, playerKey)
 					indexesToRemove = append(indexesToRemove, playerKeyToIdx[playerKey])
 				}
 			}
 		}(wg)
-
-		go func(wg *sync.WaitGroup) {
-			defer wg.Done()
-			for _, playerKey := range preference.Available {
+		wg.Wait()
+		//newPlayerKeysAvail := make([]string, 0, len(players))
+		//wg.Add(1)
+		//go func(wg *sync.WaitGroup) {
+		//	defer wg.Done()
+			for _, player := range players {
+				playerKey := player.Player.PlayerKey
 				_, ok := playerMap[playerKey]
-				if ok {
+				_, inDnd := playersDNDMap[playerKey]
+				_, inPref := playersPrefMap[playerKey]
+
+				if ok && !inPref && !inDnd {
 					playersAvail = append(playersAvail, playerKey)
-					indexesToRemove = append(indexesToRemove, playerKeyToIdx[playerKey])
+					//indexesToRemove = append(indexesToRemove, playerKeyToIdx[playerKey])
 				}
 			}
-		}(wg)
-		wg.Wait()
+		//}(wg)
+		//wg.Wait()
 
-		//for idx, idxToRemove := range indexesToRemove {
-		//	playerKeys = append(playerKeys[:idxToRemove], playerKeys[idxToRemove+1-idx:]...)
-		//}
+		/*for idx, idxToRemove := range indexesToRemove {
+			playerKeys = append(playerKeys[:idxToRemove], playerKeys[idxToRemove+1-idx:]...)
+		}*/
 		//
-		if len(preference.DoNotDraft) != 0 &&  len(preference.Preference) != 0 &&  len(preference.Available) != 0 {
+		if len(preference.DoNotDraft) != 0 && len(preference.Preference) != 0 && len(preference.Available) != 0 {
+			level.Debug(logger).Log("list", playerKeys, "ap", playersAvail)
 			playerKeys = playersAvail
 		}
 		//level.Debug(logger).Log("list", playerKeys, "ap", playersAvail)
 
 		response := GetAvailablePositionsForLeague{
-			PlayerKeys: playerKeys,
+			PlayerKeys: playersAvail,
 			PlayerMap:  playerMap,
 			Players:    players,
 			DoNotDraft: playersDoNotDraft,
@@ -162,7 +172,6 @@ func makeNewGetAvailablePlayers(logger log.Logger, service *Service, ) endpoint.
 		return &response, nil
 	}
 }
-
 
 func makeSaveUserPlayerPrefEndpoint(logger log.Logger, service *Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (interface{}, error) {

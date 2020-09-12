@@ -84,6 +84,19 @@ func MakeHTTPHandler(logger log.Logger, endpoints draft.Endpoints, m *mux.Router
 		transports.EncodeHTTPGetPlayersOrders ,
 		serverOptionsAuth...,
 	))
+
+	m.Methods(http.MethodPost).Path("/{" + leagueIdParam + "}/shuffle").Handler(httptransport.NewServer(
+		endpoints.ShuffleDraftOrder,
+		transports.DecodeHTTPShuffleDraft,
+		transports.EncodeHTTPLeague,
+		serverOptionsAuth...,
+	))
+	m.Methods(http.MethodPost).Path("/{" + leagueIdParam + "}/open").Handler(httptransport.NewServer(
+		endpoints.OpenDraft,
+		transports.DecodeHTTPOpenDraft,
+		transports.EncodeHTTPLeague,
+		serverOptionsAuth...,
+	))
 	return m
 }
 

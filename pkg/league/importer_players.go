@@ -6,6 +6,7 @@ import (
 	"github.com/thethan/fdr-users/pkg/draft/entities"
 	"github.com/thethan/fdr-users/pkg/yahoo"
 	"go.elastic.co/apm"
+	"golang.org/x/oauth2"
 )
 
 func (i Importer) ImportGamePlayers(ctx context.Context, gameID int) error {
@@ -38,6 +39,42 @@ func (i Importer) ImportGamePlayers(ctx context.Context, gameID int) error {
 	return nil
 }
 
+type ImportStats struct {
+	Token     oauth2.Token
+	PlayerKey string
+}
+
+func (i Importer) ImportPlayerStats(ctx context.Context, gameID int) error {
+	//span, ctx := apm.StartSpan(ctx, "ImportPlayerStats", "service.importer")
+	//defer span.End()
+	//// count is 25
+	//counter := 1
+	//count := 17
+	//
+	//users.OauthConfig.Client(ctx, )
+	//var fin bool
+	//for !fin {
+	//	startingCounter := count * counter
+	//	res, err := i.yahooService.GetPlayerResourcesStats(ctx, gameID, startingCounter, count)
+	//	if err != nil {
+	//		// complain
+	//		level.Error(i.logger).Log("error", err)
+	//		return err
+	//
+	//	}
+	//	if len(res.Game.Players.Player) < 25 {
+	//		fin = true
+	//	}
+	//	players := transformPlayerResponseToPlayers(ctx, gameID, res, startingCounter)
+	//	_, err = i.repo.SavePlayers(ctx, players)
+	//	if err != nil {
+	//		level.Error(i.logger).Log("message", "could not save players", "error", err)
+	//	}
+	//	counter++
+	//}
+
+	return nil
+}
 
 func (i Importer) ImportGamePlayersUserHasAccessTo(ctx context.Context, guid string) error {
 	span, ctx := apm.StartSpan(ctx, "ImportGamePlayersUserHasAccessTo", "service")
@@ -45,14 +82,13 @@ func (i Importer) ImportGamePlayersUserHasAccessTo(ctx context.Context, guid str
 		span.End()
 	}()
 
-
 	gameHashMap := make(map[int]bool)
 	leagues, err := i.repo.GetTeamsForManagers(ctx, guid)
 	if err != nil {
 		return err
 	}
 	for _, league := range leagues {
-		if imported, ok := gameHashMap[league.Game.GameID]; !imported || !ok  {
+		if imported, ok := gameHashMap[league.Game.GameID]; !imported || !ok {
 			err = i.ImportGamePlayers(ctx, league.Game.GameID)
 			if err != nil {
 				level.Error(i.logger).Log("message", "error in importing game", "err", err, "game_id", league.Game.GameID)
@@ -64,13 +100,13 @@ func (i Importer) ImportGamePlayersUserHasAccessTo(ctx context.Context, guid str
 	return nil
 }
 
-func transformPlayerResponseToPlayers(ctx context.Context, gameID int,  gamePlayers yahoo.GameResourcePlayerResponse, startingCounter int) []entities.PlayerSeason {
+func transformPlayerResponseToPlayers(ctx context.Context, gameID int, gamePlayers yahoo.GameResourcePlayerResponse, startingCounter int) []entities.PlayerSeason {
 	span, ctx := apm.StartSpan(ctx, "transformPlayerResponseToPlayers", "service.importer")
 	defer span.End()
 
 	players := make([]entities.PlayerSeason, len(gamePlayers.Game.Players.Player))
 	for idx, yahooPlayer := range gamePlayers.Game.Players.Player {
-		player := transformPlayerResponseToPlayer(ctx, gameID,  yahooPlayer, (idx+1)+startingCounter)
+		player := transformPlayerResponseToPlayer(ctx, gameID, yahooPlayer, (idx+1)+startingCounter)
 		player.SeasonStats = transformYahooSeasonStats(ctx, yahooPlayer)
 		players[idx] = player
 	}
@@ -88,7 +124,7 @@ func transformPlayerResponseToPlayer(ctx context.Context, GameID int, yahooPlaye
 	player := entities.PlayerSeason{
 		PlayerKey: yahooPlayer.PlayerKey,
 		PlayerID:  yahooPlayer.PlayerID,
-		GameID: GameID,
+		GameID:    GameID,
 		Name: entities.PlayerName{
 			Full:       yahooPlayer.Name.Full,
 			First:      yahooPlayer.Name.First,

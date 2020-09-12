@@ -14,11 +14,13 @@ import (
 	"context"
 	"github.com/go-kit/kit/endpoint"
 	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	"github.com/go-kit/kit/transport/http"
 	"github.com/thethan/fdr-users/pkg/league"
 	"github.com/thethan/fdr-users/pkg/users/info"
 	pb "github.com/thethan/fdr_proto"
 	"go.elastic.co/apm"
+	netHttp "net/http"
 )
 
 // Endpoints collects all of the endpoints that compose an add service. It's
@@ -42,16 +44,18 @@ type Endpoints struct {
 	SaveCredentialEndpoint endpoint.Endpoint
 	SaveUserInfoEndpoint   endpoint.Endpoint
 	GetUserLeagues         endpoint.Endpoint
-	logger                 log.Logger
+
+	YahooCallbackEndpoint endpoint.Endpoint
+	logger                log.Logger
 }
 
 // Endpoints
 
-func NewEndpoints(logger log.Logger, user info.GetUserInfo, saveInfo SaveUserInfo, importer *league.Importer, authMiddleware endpoint.Middleware, serverBefore http.RequestFunc) Endpoints {
+func NewEndpoints(logger log.Logger, user info.GetUserInfo, saveInfo SaveUserInfo, oauthRepo OauthRepository, importer *league.Importer, authMiddleware endpoint.Middleware, serverBefore http.RequestFunc) Endpoints {
 	// Business domain.
 	var service usersService
 	{
-		service = NewService(logger, user, saveInfo, importer)
+		service = NewService(logger, user, saveInfo, oauthRepo, importer)
 
 	}
 
@@ -64,6 +68,7 @@ func NewEndpoints(logger log.Logger, user info.GetUserInfo, saveInfo SaveUserInf
 		saveCredentialsEndpoint = authMiddleware(MakeSaveCredentialsEndpoint(&service))
 		saveUserInfoEndpoint    = MakeSaveInformationsEndpoint(&service)
 		getUserLeagueEndpoint   = authMiddleware(MakeGetUserLeaguesEndpoint(&service))
+		yahooEndpoint           = MakeYahooCallback(logger, &service)
 	)
 
 	endpoints := Endpoints{
@@ -75,6 +80,7 @@ func NewEndpoints(logger log.Logger, user info.GetUserInfo, saveInfo SaveUserInf
 		SaveCredentialEndpoint: saveCredentialsEndpoint,
 		SaveUserInfoEndpoint:   saveUserInfoEndpoint,
 		GetUserLeagues:         getUserLeagueEndpoint,
+		YahooCallbackEndpoint:  yahooEndpoint,
 	}
 
 	// Wrap selected Endpoints with middlewares. See handlers/middlewares.go
@@ -172,12 +178,26 @@ func MakeGetUserLeaguesEndpoint(s *usersService) endpoint.Endpoint {
 		span, ctx := apm.StartSpan(ctx, "GetUserLeaguesEndpoint", "endpoint")
 		defer span.End()
 
-
 		req := request.(*UserCredentialRequest)
 		v, err := s.GetUsersLeagues(ctx, req)
 		if err != nil {
 			return nil, err
 		}
 		return v, nil
+	}
+}
+
+func MakeYahooCallback(logger log.Logger, s *usersService) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		level.Debug(logger).Log("message", "Starting Yahoo Callback", "req", request)
+		span, ctx := apm.StartSpan(ctx, "YahooCallBack", "endpoint")
+		defer span.End()
+
+		req := request.(*netHttp.Request)
+		err = s.YahooCallback(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		return nil, nil
 	}
 }

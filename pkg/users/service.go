@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	firebaseAuth "firebase.google.com/go/auth"
+	"fmt"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/thethan/fdr-users/pkg/consts"
@@ -12,8 +13,11 @@ import (
 	"github.com/thethan/fdr-users/pkg/users/info"
 	"github.com/thethan/fdr-users/pkg/yahoo"
 	"go.elastic.co/apm"
+	"golang.org/x/oauth2"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"io/ioutil"
+	"net/http"
 	"sync"
 	"time"
 
@@ -26,12 +30,13 @@ type SaveUserInfo interface {
 }
 
 // NewService returns a naïve, stateless implementation of Service.
-func NewService(logger log.Logger, info info.GetUserInfo, saveUserInfo SaveUserInfo, importer league.NewImporterService) usersService {
+func NewService(logger log.Logger, info info.GetUserInfo, saveUserInfo SaveUserInfo, oauthRepo OauthRepository, importer league.NewImporterService) usersService {
 	return usersService{
 		logger:       logger,
 		userInfo:     info,
 		saveUserInfo: saveUserInfo,
 		importer:     importer,
+		oauthRepo:    oauthRepo,
 	}
 }
 
@@ -40,6 +45,7 @@ type usersService struct {
 	userInfo     info.GetUserInfo
 	saveUserInfo SaveUserInfo
 	importer     league.NewImporterService
+	oauthRepo    OauthRepository
 }
 
 // Create implements Service.
@@ -131,7 +137,7 @@ func (s usersService) SaveFromUserID(ctx context.Context, in *UserCredentialRequ
 	if len(leagueGroups) == 0 {
 		leagueGroups, err = importer.ImportFromUser(ctx, userResource)
 		if err != nil {
-			level.Error(s.logger).Log("message", "could not get import user data", "error", err, "guid", userResource.Users.User.Guid)
+			level.Error(s.logger).Log("message", "could not get importer user data", "error", err, "guid", userResource.Users.User.Guid)
 		}
 	} else {
 		// ignore on not empty
@@ -239,4 +245,74 @@ func (s usersService) GetUsersLeagues(ctx context.Context, in *UserCredentialReq
 	}
 
 	return &resp, nil
+}
+
+const guidKey string = "xoauth_yahoo_guid"
+
+func (service usersService) YahooCallback(ctx context.Context, r *http.Request) error {
+	span, ctx := apm.StartSpan(ctx, "YahooCallback", "service")
+	defer span.End()
+
+	values := r.URL.Query()
+	state := values["state"]
+	code := values["code"]
+
+	token, err := getUserInfo(ctx, service.logger, state[0], code[0])
+	if err != nil {
+		level.Error(service.logger).Log("msg", "could not  get User from yahoo")
+		return err
+	}
+	level.Debug(service.logger).Log("msg", "token received", "token", token)
+	content, err := getUserGameInfoFromYahoo(ctx, token)
+	level.Debug(service.logger).Log("content", string(content))
+
+	// get the raw key from oauth
+	guidInterface := token.Extra(guidKey)
+	guid, ok := guidInterface.(string)
+	if !ok {
+		_ = level.Error(service.logger).Log("msg", "Could not get key from")
+	}
+	_ = level.Debug(service.logger).Log("msg", "about to save guid", "guid", guid)
+
+	return service.oauthRepo.SaveOauthToken(ctx, guid, *token)
+}
+
+func getUserInfo(ctx context.Context, logger log.Logger, state string, code string) (*oauth2.Token, error) {
+	span, ctx := apm.StartSpan(ctx, "getUserInfo", "repo.oauth")
+	defer span.End()
+	// @todo make this into an auth state from the actual user and not just
+	//if state != oauthStateString {
+	if state == "" {
+		return nil, fmt.Errorf("invalid OauthConfig state")
+	}
+	token, err := OauthConfig.Exchange(ctx, code)
+	if err != nil {
+		return nil, fmt.Errorf("code exchange failed: %s", err.Error())
+	}
+	level.Debug(logger).Log("msg", "token received", "token", token)
+	return token, nil
+}
+
+// save token info here.
+func getUserGameInfoFromYahoo(ctx context.Context, token *oauth2.Token) ([]byte, error) {
+	span, ctx := apm.StartSpan(ctx, "getUserGameInfoFromYahoo", "repo")
+	defer span.End()
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://fantasysports.yahooapis.com/fantasy/v2/users;use_login=1/games", nil)
+	if err != nil {
+		return nil, fmt.Errorf("could not create http request: %v", err)
+	}
+	req.Header.Add("Authorization", "Bearer "+token.AccessToken)
+	client := http.Client{}
+	response, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed getting user info: %s", err.Error())
+	}
+	defer response.Body.Close()
+	contents, err := ioutil.ReadAll(response.Body)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed reading response body: %s", err.Error())
+	}
+	return contents, nil
 }

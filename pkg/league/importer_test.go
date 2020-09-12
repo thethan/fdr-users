@@ -70,7 +70,7 @@ func TestImporter_ImportLeagueFromUser(t *testing.T) {
 	for idx := range leagueGroups {
 		assert.True(t, len(leagueGroups[idx].Leagues) > 0, "league groups do not have league")
 		// add league group to the first one
-		//nLeague, err := mongoRepo.SaveLeague(ctx, leagueGroup)
+		//nLeague, err := mongoRepo.SaveLeagueLeagueGroup(ctx, leagueGroup)
 		assert.Nil(t, err)
 	}
 }

@@ -20,3 +20,5 @@ spec:
     - User-Agent
     max_age: "86400"
     credentials: true
+    # want this reduce this but we are at the behest of yahoo taking a minute on yahoo oauth
+{{/*  timeout_ms: 7000*/}}

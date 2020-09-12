@@ -21,27 +21,27 @@ func NewHTTPServer(fieldLogger logrus.FieldLogger, m *mux.Router, endpoints coor
 
 
 
-	m.Methods(http.MethodGet).PathPrefix("/import/leagues").HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	m.Methods(http.MethodGet).PathPrefix("/importer/leagues").HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.WriteHeader(http.StatusAlreadyReported)
 	})
-	m.Methods(http.MethodGet).PathPrefix("/import/players").HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	m.Methods(http.MethodGet).PathPrefix("/importer/players").HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.WriteHeader(http.StatusAlreadyReported)
 	})
 
-	m.Methods("POST").Path("/import/leagues").Handler(httptransport.NewServer(
+	m.Methods("POST").Path("/importer/leagues").Handler(httptransport.NewServer(
 		endpoints.ImportUserLeagues,
 		DecodeHTTPImportUserRequest(fieldLogger),
 		EncodeHTTPDecodeImportUserRequest(fieldLogger),
 		options...,
 	))
-	m.Methods("POST").Path("/import/games/{game_id}/players").Handler(httptransport.NewServer(
+	m.Methods("POST").Path("/importer/games/{game_id}/players").Handler(httptransport.NewServer(
 		endpoints.ImportGamePlayers,
 		DecodeHTTPImportGamePlayersRequest(fieldLogger),
 		EncodeHTTPDecodeImportGamePlayersRequest(fieldLogger),
 		options...,
 	))
 
-	m.Methods("POST").Path("/import/leagues").Handler(httptransport.NewServer(
+	m.Methods("POST").Path("/importer/leagues").Handler(httptransport.NewServer(
 		endpoints.ImportGamePlayers,
 		DecodeHTTPImportGamePlayersRequest(fieldLogger),
 		EncodeHTTPDecodeImportGamePlayersRequest(fieldLogger),

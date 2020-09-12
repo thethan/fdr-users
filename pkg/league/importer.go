@@ -5,6 +5,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	kubemq "github.com/kubemq-io/protobuf/go"
 	"github.com/thethan/fdr-users/pkg/draft/entities"
 	"github.com/thethan/fdr-users/pkg/yahoo"
 	"go.elastic.co/apm"
@@ -23,7 +24,7 @@ type SaveLeagueInfoIFace interface {
 	SaveDraftOrder(ctx context.Context, leagueKey string, teamOrder []string) error
 	SaveDraftResult(ctx context.Context, draftResult entities.DraftResult) error
 	SaveDraftResults(ctx context.Context, draftResult []entities.DraftResult) error
-	SaveLeague(context.Context, *entities.LeagueGroup) (*entities.LeagueGroup, error)
+	SaveLeagueLeagueGroup(context.Context, *entities.LeagueGroup) (*entities.LeagueGroup, error)
 	SavePlayers(context.Context, []entities.PlayerSeason) ([]entities.PlayerSeason, error)
 }
 
@@ -123,6 +124,7 @@ type Importer struct {
 
 	yahooService *yahoo.Service
 	repo         SaveLeagueInfoIFace
+	queue        kubemq.KubemqClient
 }
 
 func NewImportService(logger log.Logger, yahooService *yahoo.Service, repo SaveLeagueInfoIFace) Importer {
@@ -236,7 +238,7 @@ func (i *Importer) ImportFromUser(ctx context.Context, userGames *yahoo.UserReso
 	for _, leagueGroup := range dto.leagueGroups {
 		// add league group to the first one
 		go func(leagueGroup *entities.LeagueGroup) {
-			_, err := i.repo.SaveLeague(ctx, leagueGroup)
+			_, err := i.repo.SaveLeagueLeagueGroup(ctx, leagueGroup)
 			if err != nil {
 				level.Error(i.logger).Log("error", err)
 			}

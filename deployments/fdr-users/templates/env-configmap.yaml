@@ -15,3 +15,7 @@ data:
   KUBEMQ_SERVICE: {{ .Values.kubemq.service | quote }}
   KUBEMQ_PORT: {{ .Values.kubemq.port | quote }}
 
+  YAHOO_CLIENT_REDIRECT: {{ .Values.yahoo.callback | quote }}
+  YAHOO_CLIENT_ID: {{ .Values.yahoo.key | quote }}
+  YAHOO_CLIENT_SECRET: {{ .Values.yahoo.secret | quote }}
+

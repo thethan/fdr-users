@@ -2410,21 +2410,29 @@ type PlayerResourcesStatsResponse struct {
 	} `xml:"player"`
 }
 
-func (s *Service) GetPlayerResourcesStats(playerKey string, week int) (*PlayerResourcesStats, error) {
+func (s *Service) GetPlayerResourcesStats(ctx context.Context, playerKey string, week int) (*PlayerResourcesStats, error) {
 	var weekString string
 	if week > 0 {
 		weekString = fmt.Sprintf(";type=week;week=%d", week)
 	}
 	url := fmt.Sprintf("https://fantasysports.yahooapis.com/fantasy/v2/player/%s/stats%s", playerKey, weekString)
 	res, err := s.Get(url)
-
 	if err != nil {
 		return nil, err
 	}
 
 	defer res.Body.Close()
-
-	return nil, errors.New("not implemented")
+	v := PlayerResourcesStats{}
+	bytes, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+	err = xml.Unmarshal(bytes, &v)
+	if err != nil {
+		fmt.Printf("error: %v", err)
+		return nil, err
+	}
+	return &v, nil
 }
 
 type PlayerResourcesPercentOwned struct {

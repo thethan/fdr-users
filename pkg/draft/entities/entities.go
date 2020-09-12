@@ -37,7 +37,7 @@ type League struct {
 	Game           Game               `json:"game" bson:"game"`          // season is the key
 	DraftOrder     []string           `json:"-" bson:"draft_order,omitempty"`
 	TeamDraftOrder []Team             `json:"draft_order,omitempty" bson:"-"`
-	DraftStarted   bool               `json:"draft_started,omitempty" bson:"draft_started,omitempty"`
+	DraftStarted   bool               `json:"draft_started" bson:"draft_started,omitempty"`
 	DraftedCheck   []string           `json:"drafted_check" bson:"draft_check"`
 }
 

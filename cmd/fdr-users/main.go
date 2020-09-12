@@ -3,7 +3,6 @@ package main
 import (
 	"cloud.google.com/go/firestore"
 	"context"
-	"encoding/json"
 	firebaseAuth "firebase.google.com/go/auth"
 	"flag"
 	"fmt"
@@ -19,7 +18,8 @@ import (
 	"github.com/thethan/fdr-users/pkg/draft"
 	"github.com/thethan/fdr-users/pkg/draft/repositories"
 	draftTransports "github.com/thethan/fdr-users/pkg/draft/transports"
-	"github.com/thethan/fdr-users/pkg/guests"
+	repositories2 "github.com/thethan/fdr-users/pkg/users/repositories"
+
 	"github.com/thethan/fdr-users/pkg/kubemq"
 	"github.com/thethan/fdr-users/pkg/league"
 	"github.com/thethan/fdr-users/pkg/mongo"
@@ -43,8 +43,6 @@ import (
 	"github.com/thethan/fdr-users/pkg/coordinator"
 	"go.elastic.co/apm"
 	"go.elastic.co/apm/module/apmlogrus"
-	"io/ioutil"
-
 	"net"
 	"os"
 
@@ -111,44 +109,6 @@ func init() {
 	logrusLogger.AddHook(&apmlogrus.Hook{})
 }
 
-type serviceAccount struct {
-	ProjectID               string `json:"project_id"`
-	PrivateKeyID            string `json:"private_key_id"`
-	PrivateKey              string `json:"private_key"`
-	ClientEmail             string `json:"client_email"`
-	ClientID                string `json:"client_id"`
-	AuthURI                 string `json:"auth_uri"`
-	TokenURI                string `json:"token_uri"`
-	AuthProviderX509CertUrl string `json:"auth_provider_x509_cert_url"`
-	ClientX509CertUrl       string `json:"client_x509_cert_url"`
-}
-
-func readJsonFile(cfg Config) serviceAccount {
-	// Open our jsonFile
-	jsonFile, err := os.Open(cfg.ServiceAccountFileLocation)
-	// if we os.Open returns an error then handle it
-	if err != nil {
-		fmt.Println(err)
-	}
-	fmt.Println("Successfully Opened users.json")
-	// defer the closing of our jsonFile so that we can parse it later on
-	defer jsonFile.Close()
-
-	// we initialize our Users array
-	var serviceAccount serviceAccount
-	byteValue, _ := ioutil.ReadAll(jsonFile)
-
-	// we unmarshal our byteArray which contains our
-	// jsonFile's content into 'users' which we defined above
-	err = json.Unmarshal(byteValue, &serviceAccount)
-	if err != nil {
-		fmt.Errorf("error in unmarshalling service account")
-		os.Exit(1)
-	}
-
-	return serviceAccount
-}
-
 // Run starts a new http server, gRPC server, and a debug server with the
 // passed config and logger
 func main() {
@@ -175,7 +135,8 @@ func main() {
 	importService := league.NewImportService(logger, yahooProvider, &mongoRepo)
 	coordinatorEndpoints := coordinator.NewEndpoints(logrusLogger, importService, authSvc.NewAuthMiddleware())
 	_ = transports.NewServer(logger, logrusLogger, coordinatorEndpoints)
-	endpoints := users.NewEndpoints(logger, &repo, &repo, &importService, authSvc.NewAuthMiddleware(), authSvc.ServerBefore)
+	oauthRepo := repositories2.NewMongoOauthRepository(logger, mongoClient)
+	endpoints := users.NewEndpoints(logger, &repo, &repo, &oauthRepo, &importService, authSvc.NewAuthMiddleware(), authSvc.ServerBefore)
 
 	var kubemqConfig KubemqConfig
 	err = env.Parse(&kubemqConfig)
@@ -210,26 +171,15 @@ func main() {
 	draftEndpoints := draft.NewEndpoints(logger, &draftService, &authSvc, authSvc.NewAuthMiddleware(), authSvc.GetUserInfoFromContextMiddleware(&repo))
 
 	// players
-	playerService := players.NewService(logger, mongoRepo,)
-	playersEndpoint := players.NewEndpoint(logger, &playerService, authSvc.NewAuthMiddleware(),  authSvc.GetUserInfoFromContextMiddleware(&repo))
+	playerService := players.NewService(logger, mongoRepo)
+	playersEndpoint := players.NewEndpoint(logger, &playerService, authSvc.NewAuthMiddleware(), authSvc.GetUserInfoFromContextMiddleware(&repo))
 
-	// guests
-	guestsMongoRepo := guests.NewMongoRepository(logger, mongoClient)
-	guestService := guests.NewService(logger, kubemqClient, guestsMongoRepo)
-	guestEndpoints := guests.NewEndpoints(logger, guestService,  authSvc.NewAuthMiddleware())
-
-	users.MakeHTTPHandler(endpoints, ogGrouter, authSvc.ServerBefore)
+	users.MakeHTTPHandler(logger, endpoints, ogGrouter, &oauthRepo, authSvc.ServerBefore)
 	draftTransports.MakeHTTPHandler(logger, draftEndpoints, ogGrouter, authSvc.ServerBefore)
 	playersTransport.MakeHTTPHandler(logger, playersEndpoint, ogGrouter, authSvc.ServerBefore)
-	guests.MakeHTTPHandler(logger, guestEndpoints, ogGrouter, authSvc.ServerBefore)
 
 	// Mechanical domain.
 	errc := make(chan error)
-	go func() {
-		errc <- guestService.Start(ctx)
-	}()
-
-	defer guestService.Close()
 
 	apm.DefaultTracer.SetLogger(logrusLogger)
 	logrusLogger.AddHook(&apmlogrus.Hook{})
@@ -270,9 +220,9 @@ func main() {
 
 			return http.Serve(ln,
 				muxhandlers.CORS(muxhandlers.AllowedHeaders([]string{
-				"X-Requested-With",
-				"Content-Type",
-				"Authorization"}),
+					"X-Requested-With",
+					"Content-Type",
+					"Authorization"}),
 					muxhandlers.AllowedMethods([]string{"GET", "POST", "PUT", "HEAD", "OPTIONS"}), muxhandlers.AllowedOrigins([]string{"*"}))(ogGrouter))
 		}, func(err error) {
 			return

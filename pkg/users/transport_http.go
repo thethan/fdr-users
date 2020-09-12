@@ -12,10 +12,17 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
+	"github.com/google/uuid"
 	"github.com/thethan/fdr-users/pkg/draft/entities"
+	"github.com/thethan/fdr-users/pkg/yahoo"
+	"go.elastic.co/apm"
+	"golang.org/x/oauth2"
 	"io"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
@@ -47,7 +54,7 @@ var (
 
 // MakeHTTPHandler returns a handler that makes a set of endpoints available
 // on predefined paths.
-func MakeHTTPHandler(endpoints Endpoints, m *mux.Router, authServerBefore httptransport.RequestFunc, options ...httptransport.ServerOption) *mux.Router {
+func MakeHTTPHandler(logger log.Logger, endpoints Endpoints, m *mux.Router, oauthRepository OauthRepository, authServerBefore httptransport.RequestFunc, options ...httptransport.ServerOption) *mux.Router {
 	serverOptions := []httptransport.ServerOption{
 		httptransport.ServerBefore(headersToContext),
 		httptransport.ServerErrorEncoder(errorEncoder),
@@ -57,12 +64,14 @@ func MakeHTTPHandler(endpoints Endpoints, m *mux.Router, authServerBefore httptr
 	serverOptionsAuth := append(serverOptions, httptransport.ServerBefore(authServerBefore))
 
 	m = m.PathPrefix("/users").Subrouter()
-	m.Methods("POST").Path("/auth").Handler(httptransport.NewServer(
-		endpoints.CreateEndpoint,
-		DecodeHTTPCreateZeroRequest,
-		EncodeHTTPGenericResponse,
-		serverOptionsAuth...,
-	))
+	m.Methods(
+		http.MethodGet).Path("/auth").Handler(
+		httptransport.NewServer(
+			endpoints.YahooCallbackEndpoint,
+			DecodeHTTPRequestToHTTPRequest(logger),
+			EncodeHTTPGenericResponse,
+		))
+	m.Methods(http.MethodGet).Path("/login").HandlerFunc(HandleYahooLogin)
 
 	m.Methods("POST").Path("/search").Handler(httptransport.NewServer(
 		endpoints.SearchEndpoint,
@@ -71,12 +80,6 @@ func MakeHTTPHandler(endpoints Endpoints, m *mux.Router, authServerBefore httptr
 		serverOptionsAuth...,
 	))
 
-	m.Methods("POST").Path("/login").Handler(httptransport.NewServer(
-		endpoints.LoginEndpoint,
-		DecodeHTTPLoginZeroRequest,
-		EncodeHTTPGenericResponse,
-		serverOptionsAuth...,
-	))
 	m.Methods("POST").Path("/credentials").Handler(httptransport.NewServer(
 		endpoints.SaveCredentialEndpoint,
 		DecodeHTTPSaveCredentialRequest,
@@ -105,7 +108,10 @@ func MakeHTTPHandler(endpoints Endpoints, m *mux.Router, authServerBefore httptr
 // implements json.Marshaler, and the marshaling succeeds, the JSON encoded
 // form of the error will be used. If the error implements StatusCoder, the
 // provided StatusCode will be used instead of 500.
-func errorEncoder(_ context.Context, err error, w http.ResponseWriter) {
+func errorEncoder(ctx context.Context, err error, w http.ResponseWriter) {
+	span, ctx := apm.StartSpan(ctx, "errorEncoder", "response")
+	defer span.End()
+
 	body, _ := json.Marshal(errorWrapper{Error: err.Error()})
 	if marshaler, ok := err.(json.Marshaler); ok {
 		if jsonBody, marshalErr := marshaler.MarshalJSON(); marshalErr == nil {
@@ -287,6 +293,13 @@ func headersToContext(ctx context.Context, r *http.Request) context.Context {
 	return ctx
 }
 
+func serverBeforeHeaders(ctx context.Context, r *http.Request) context.Context {
+	span, ctx := apm.StartSpan(ctx, "serverBeforeHeaders", "request")
+	defer span.End()
+
+	return ctx
+}
+
 type UserCredentialRequest struct {
 	UID          string `json:"uid"`
 	Session      string `json:"session"`
@@ -297,12 +310,12 @@ type UserCredentialRequest struct {
 }
 
 type UserCredentialResponse struct {
-	UID          string `json:"uid"`
-	Session      string `json:"session"`
-	RefreshToken string `json:"refresh_token"`
-	Guid         string `json:"guid"`
+	UID          string                  `json:"uid"`
+	Session      string                  `json:"session"`
+	RefreshToken string                  `json:"refresh_token"`
+	Guid         string                  `json:"guid"`
 	Leagues      []*entities.LeagueGroup `json:"leagues"`
-	Email        string `json:"email"`
+	Email        string                  `json:"email"`
 }
 
 func DecodeHTTPSaveCredentialByUserIDRequest(ctx context.Context, r *http.Request) (interface{}, error) {
@@ -385,4 +398,39 @@ func DecodeHTTPSaveCredentialRequest(_ context.Context, r *http.Request) (interf
 	_ = queryParams
 
 	return &req, err
+}
+
+var (
+	OauthConfig      *oauth2.Config
+	oauthStateString = uuid.New().String()
+)
+
+func init() {
+	OauthConfig = &oauth2.Config{
+		RedirectURL:  os.Getenv("YAHOO_CLIENT_REDIRECT"),
+		ClientID:     os.Getenv("YAHOO_CLIENT_ID"),
+		ClientSecret: os.Getenv("YAHOO_CLIENT_SECRET"),
+		Scopes:       []string{"fspt-w"},
+		Endpoint:     yahoo.Endpoint,
+	}
+}
+
+func HandleYahooLogin(w http.ResponseWriter, r *http.Request) {
+	url := OauthConfig.AuthCodeURL(oauthStateString)
+	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
+}
+
+type OauthRepository interface {
+	SaveOauthToken(ctx context.Context, uuid string, token oauth2.Token) error
+}
+
+//     protected $fillable = ['access_token', 'expires_in', 'token_type', 'refresh_token', 'xoauth_yahoo_guid'];
+func DecodeHTTPRequestToHTTPRequest(logger log.Logger) httptransport.DecodeRequestFunc {
+	return func(ctx context.Context, r *http.Request) (interface{}, error) {
+		span, ctx := apm.StartSpan(ctx, "DecodeHTTPRequestToHTTPRequest", "request")
+		defer span.End()
+
+		level.Debug(logger).Log("message", "request func", "request", r)
+		return r, nil
+	}
 }

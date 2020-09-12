@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/go-kit/kit/log"
+	"github.com/thethan/fdr-users/pkg/draft"
 	"github.com/thethan/fdr-users/pkg/draft/entities"
 	"github.com/thethan/fdr-users/pkg/players"
 	"io"
@@ -231,6 +232,21 @@ func EncodeHTTPGetPlayersOrders(_ context.Context, w http.ResponseWriter, respon
 	return nil
 }
 
+// EncodeHTTPLeague is a transport/http.EncodeResponseFunc that encodes
+// the response as JSON to the response writer. Primarily useful in a server.
+func EncodeHTTPLeague(_ context.Context, w http.ResponseWriter, response interface{}) error {
+	res, ok := response.(*entities.League)
+	if !ok {
+		return errors.New("could not get league ")
+	}
+	bytesJson, err := json.Marshal(&res)
+	if err != nil {
+		return err
+	}
+	w.Write(bytesJson)
+	return nil
+}
+
 
 func DecodeHTTPSavePlayersOrders(ctx context.Context, r *http.Request) (interface{}, error) {
 	defer r.Body.Close()
@@ -265,6 +281,72 @@ func DecodeHTTPSavePlayersOrders(ctx context.Context, r *http.Request) (interfac
 	}
 	req.GameID = gameIDs[0]
 	req.LeagueKey = leagueKey
+
+	return &req, err
+}
+
+
+
+func DecodeHTTPOpenDraft(ctx context.Context, r *http.Request) (interface{}, error) {
+	defer r.Body.Close()
+	var req draft.OpenDraftRequest
+	//buf, err := ioutil.ReadAll(r.Body)
+	//if err != nil {
+	//	return nil, errors.Wrapf(err, "cannot read body of http request")
+	//}
+	//if len(buf) > 0 {
+	//	// AllowUnknownFields stops the unmarshaler from failing if the JSON contains unknown fields.
+	//	if err = json.Unmarshal(buf, &req); err != nil {
+	//		const size = 8196
+	//		if len(buf) > size {
+	//			buf = buf[:size]
+	//		}
+	//		return nil, httpError{errors.Wrapf(err, "request body '%s': cannot parse non-json request body", buf),
+	//			http.StatusBadRequest,
+	//			nil,
+	//		}
+	//	}
+	//}
+
+	pathParams := mux.Vars(r)
+	leagueKey, ok := pathParams[leagueIdParam]
+	if !ok {
+		return nil, errors.New("bad request")
+	}
+
+	req.LeagueID = leagueKey
+
+	return &req, nil
+}
+
+func DecodeHTTPShuffleDraft(ctx context.Context, r *http.Request) (interface{}, error) {
+	defer r.Body.Close()
+	var req draft.ShuffleDraftOrderRequest
+	buf, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		return nil, errors.Wrapf(err, "cannot read body of http request")
+	}
+	if len(buf) > 0 {
+		// AllowUnknownFields stops the unmarshaler from failing if the JSON contains unknown fields.
+		if err = json.Unmarshal(buf, &req); err != nil {
+			const size = 8196
+			if len(buf) > size {
+				buf = buf[:size]
+			}
+			return nil, httpError{errors.Wrapf(err, "request body '%s': cannot parse non-json request body", buf),
+				http.StatusBadRequest,
+				nil,
+			}
+		}
+	}
+
+	pathParams := mux.Vars(r)
+	leagueKey, ok := pathParams[leagueIdParam]
+	if !ok {
+		return nil, errors.New("bad request")
+	}
+
+	req.LeagueID = leagueKey
 
 	return &req, err
 }

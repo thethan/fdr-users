@@ -2,11 +2,17 @@ package draft
 
 import (
 	"context"
+	"errors"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/thethan/fdr-users/pkg/auth"
 	"github.com/thethan/fdr-users/pkg/draft/entities"
+	userEntities "github.com/thethan/fdr-users/pkg/users/entities"
 	"go.elastic.co/apm"
 	"math"
+	"math/rand"
+	"reflect"
+	"time"
 )
 
 func NewService(logger log.Logger, repository draftRepository, broadcastRepo broadCastRepo) Service {
@@ -16,6 +22,7 @@ func NewService(logger log.Logger, repository draftRepository, broadcastRepo bro
 type draftRepository interface {
 	GetDraftResults(ctx context.Context, leagueKey string) ([]entities.DraftResult, error)
 	GetLeague(ctx context.Context, leagueKey string) (entities.League, error)
+	SaveLeague(ctx context.Context, league entities.League) (entities.League, error)
 	ImportAllAvailablePlayers(ctx context.Context, gameID int, leagueKey string) error
 	SaveDraftResultFromUser(ctx context.Context, league entities.League, user entities.User, team entities.Team, player entities.PlayerSeason, pick, round int) (*entities.DraftResult, error)
 	GetTeamDraftResultsByTeam(ctx context.Context, leagueKey string) (map[string][]entities.DraftResult, error)
@@ -25,6 +32,8 @@ type draftRepository interface {
 
 type broadCastRepo interface {
 	BroadCastDraftResult(ctx context.Context, league entities.League, user entities.User, team entities.Team, draftResult entities.DraftResult, pick, round int, rosters map[string]entities.Roster) error
+	BroadCastLeagueInformation(ctx context.Context, league entities.League, message string, broadcastType entities.BroadcastType) error
+	ChangeTeamName(ctx context.Context, league entities.League, user entities.User, team entities.Team) error
 }
 
 type Service struct {
@@ -123,14 +132,90 @@ func addToRoster(rosterSlotKey string, roster entities.Roster, result entities.D
 	return roster
 }
 
-func (service *Service) OpenDraft(ctx context.Context, leagueKey string) error {
+func (s *Service) OpenDraft(ctx context.Context, leagueKey string) (*entities.League, error) {
 	span, ctx := apm.StartSpan(ctx, "OpenDraft", "service")
 	defer func() {
 		span.End()
 	}()
 
-	// make
-	return nil
+	league, err := s.draftRepo.GetLeague(ctx, leagueKey)
+	if err != nil {
+		level.Error(s.logger).Log("message", "could get draft", "error", err)
+		return nil, err
+	}
+	if !isUserCommissioner(ctx, league) {
+		return nil, errors.New("user is not commissioner")
+	}
+	league.DraftStarted = true
+
+	league, err = s.draftRepo.SaveLeague(ctx, league)
+	if err != nil {
+		level.Error(s.logger).Log("message", "could not save draft", "error", err)
+		return nil, err
+	}
+	err = s.broadCastRepo.BroadCastLeagueInformation(ctx, league, "league is opened", 0)
+
+	if err != nil {
+		level.Error(s.logger).Log("message", "could not save draft", "error", err)
+		return nil, err
+	}
+	return &league, err
+}
+
+func isUserCommissioner(ctx context.Context, league entities.League) bool {
+	userInterface := ctx.Value(auth.User)
+	reflect.TypeOf(userInterface)
+	user, ok := userInterface.(*userEntities.User)
+	if !ok {
+		return false
+	}
+	for _, team := range league.Teams {
+		for _, manager := range team.Manager {
+			if user.GUID == manager.Guid {
+				return manager.IsCommissioner
+			}
+		}
+	}
+	return false
+}
+
+func (s *Service) ShuffleOrder(ctx context.Context, leagueKey string) (*entities.League, error) {
+	span, ctx := apm.StartSpan(ctx, "OpenDraft", "service")
+	defer func() {
+		span.End()
+	}()
+
+	league, err := s.draftRepo.GetLeague(ctx, leagueKey)
+	if err != nil {
+		level.Error(s.logger).Log("message", "could get draft", "error", err)
+		return nil, err
+	}
+
+	if !isUserCommissioner(ctx, league) {
+		return nil, errors.New("user is not commissioner")
+	}
+
+	if league.DraftStarted {
+		_ = level.Error(s.logger).Log("message", "draft is started and could not change order", "error", errors.New("could not change order"))
+	}
+
+	draftOrder := league.DraftOrder
+	rand.Seed(time.Now().UnixNano())
+	rand.Shuffle(len(draftOrder), func(i, j int) { draftOrder[i], draftOrder[j] = draftOrder[j], draftOrder[i] })
+	league.DraftOrder = draftOrder
+
+	league, err = s.draftRepo.SaveLeague(ctx, league)
+	if err != nil {
+		level.Error(s.logger).Log("message", "could not save draft", "error", err)
+		return nil, err
+	}
+	err = s.broadCastRepo.BroadCastLeagueInformation(ctx, league, "draft order change", 0)
+
+	if err != nil {
+		level.Error(s.logger).Log("message", "could not save draft", "error", err)
+		return nil, err
+	}
+	return &league, err
 }
 
 // let numRounds = 0
