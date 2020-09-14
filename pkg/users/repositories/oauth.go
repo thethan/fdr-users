@@ -67,6 +67,15 @@ func oauth2TokenToUserToken(oauth2Token oauth2.Token) oauthUser {
 	}
 }
 
+func oauthUserToOauth(oauth2Token oauthUser) oauth2.Token {
+	return oauth2.Token{
+		AccessToken:  oauth2Token.AccessToken,
+		TokenType:    oauth2Token.TokenType,
+		RefreshToken: oauth2Token.RefreshToken,
+		Expiry:       oauth2Token.Expiry,
+	}
+}
+
 func (r *Repository) SaveOauthToken(ctx context.Context, uuid string, token oauth2.Token) error {
 	span, ctx := apm.StartSpan(ctx, "SaveOauthToken", "repository.Mongo")
 	defer span.End()
@@ -86,4 +95,27 @@ func (r *Repository) SaveOauthToken(ctx context.Context, uuid string, token oaut
 	level.Debug(r.logger).Log("message", "results", "results", results)
 
 	return nil
+}
+
+func (r *Repository) GetUserOAuthToken(ctx context.Context, guid string) (oauth2.Token, error) {
+	span, ctx := apm.StartSpan(ctx, "GetUserOAuthToken", "repository.Mongo")
+	defer span.End()
+
+	var user oauthUser
+	collection := r.client.Database(database).Collection(Oauth)
+	filter := bson.M{"guid": guid}
+	result := collection.FindOne(ctx, filter, &options.FindOneOptions{})
+	if result.Err() != nil {
+		level.Error(r.logger).Log("error", result.Err(), "message", "could not execute query", "guid", guid)
+		return oauth2.Token{}, result.Err()
+	}
+	err := result.Decode(&user)
+
+	if err != nil {
+		level.Error(r.logger).Log("error", err, "message", "could not execute query", "guid", guid)
+		return oauth2.Token{}, err
+	}
+
+	level.Debug(r.logger).Log("message", "results", "results", result.Err())
+	return oauthUserToOauth(user), nil
 }

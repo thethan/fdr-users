@@ -14,6 +14,7 @@ import (
 	"github.com/grpc-ecosystem/go-grpc-middleware"
 	grpc_auth "github.com/grpc-ecosystem/go-grpc-middleware/auth"
 	"github.com/oklog/run"
+	"github.com/thethan/fdr-users/internal/yahoo/importer"
 	"github.com/thethan/fdr-users/pkg/coordinator/transports"
 	"github.com/thethan/fdr-users/pkg/draft"
 	"github.com/thethan/fdr-users/pkg/draft/repositories"
@@ -178,6 +179,8 @@ func main() {
 	draftTransports.MakeHTTPHandler(logger, draftEndpoints, ogGrouter, authSvc.ServerBefore)
 	playersTransport.MakeHTTPHandler(logger, playersEndpoint, ogGrouter, authSvc.ServerBefore)
 
+	// new importer
+	importer.NewImporterClient(logger, mongoRepo, )
 	// Mechanical domain.
 	errc := make(chan error)
 

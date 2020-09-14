@@ -2410,6 +2410,12 @@ type PlayerResourcesStatsResponse struct {
 	} `xml:"player"`
 }
 
+func (s *Service) WithHttpClient(client *http.Client) {
+	s.client = client
+}
+
+
+
 func (s *Service) GetPlayerResourcesStats(ctx context.Context, playerKey string, week int) (*PlayerResourcesStats, error) {
 	var weekString string
 	if week > 0 {

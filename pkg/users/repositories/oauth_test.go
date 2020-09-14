@@ -3,8 +3,8 @@ package repositories
 import (
 	"context"
 	"github.com/stretchr/testify/assert"
+	"github.com/thethan/fdr-users/internal/test_helpers"
 	"github.com/thethan/fdr-users/pkg/mongo"
-	"github.com/thethan/fdr-users/pkg/test_helpers"
 	"golang.org/x/oauth2"
 	"os"
 	"testing"

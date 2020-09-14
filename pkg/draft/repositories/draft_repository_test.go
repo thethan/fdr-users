@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"github.com/stretchr/testify/assert"
+	"github.com/thethan/fdr-users/internal/test_helpers"
 	"github.com/thethan/fdr-users/pkg/draft/entities"
 	"github.com/thethan/fdr-users/pkg/mongo"
-	"github.com/thethan/fdr-users/pkg/test_helpers"
 	"os"
 	"testing"
 )
@@ -245,6 +245,22 @@ func TestMongoRepository_GetUserPreference(t *testing.T) {
 	assert.Equal(t, leagueKey, pref.LeagueKey)
 	assert.Equal(t, userGuid, pref.UserID)
 	assert.True(t, len(pref.Preference) > 1,)
+}
+
+func TestMongoRepository_GetPlayersByRank(t *testing.T) {
+	logger := test_helpers.LogrusLogger(t)
+	client, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
+	assert.Nil(t, err)
+	if t.Failed() {
+		t.FailNow()
+	}
+
+	mongoRepo := NewMongoRepository(logger, client, "fdr", "draft", "fdr_user", "roster")
+	assert.Nil(t, err)
+
+	players, err := mongoRepo.GetPlayersByRank(context.TODO(), 100, 0)
+	assert.Nil(t, err)
+	assert.Equal(t, 100, len(players),)
 }
 
 func TestMongoRepository_SaveDraftResults2(t *testing.T) {

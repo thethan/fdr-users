@@ -1,7 +1,0 @@
-package importer
-
-
-
-func NewImporter() {
-
-}

@@ -54,5 +54,5 @@ type PlayerByeWeeks struct {
 
 type PlayerStat struct {
 	StatID int     `json:"stat_id" bson:"stat_id"`
-	Value  float32 `json:"value" bson:"value"`
+	Value  float64 `json:"value" bson:"value"`
 }
