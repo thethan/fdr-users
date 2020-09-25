@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"context"
+	"fmt"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -24,38 +25,60 @@ func NewMongoStatsRepo(logger log.Logger, client *mongo.Client) StatsRepo {
 	}
 }
 
+// SavePlayerStats will save a player set. This does not happen with a transaction.
+// Will need to update replica sets Code is commented out below
 func (s StatsRepo) SavePlayerStats(ctx context.Context, playerKey string, season, week string, stats []pkgEntities.PlayerStat) error {
 	span, ctx := apm.StartSpan(ctx, "SavePlayerStats", "repository.Mongo")
 	defer span.End()
 
 	collection := s.client.Database("fdr").Collection("player_stats")
 	findQuert := bson.M{"player_key": playerKey}
-	query := bson.M{"$set": bson.M{"player_key": playerKey, "stats_by_season": bson.M{season: bson.M{week: stats}}}}
+	query := bson.M{"$set": bson.M{"player_key": playerKey, fmt.Sprintf("stats_by_season.%s.%s", season, week): stats}}
 
 	var playerStatBson pkgEntities.PlayerStats
 	playerStatBson.PlayerID = playerKey
 
-	callback := func(sessCtx mongo.SessionContext) (interface{}, error) {
-		// Important: You must pass sessCtx as the Context parameter to the operations for them to be executed in the
-		// transaction.
-		if _, err := collection.UpdateOne(sessCtx, findQuert, query, &options.UpdateOptions{Upsert: aws.Bool(true)}); err != nil {
-			return nil, err
-		}
-		return nil, nil
-	}
-
-	// Step 2: Start a session and run the callback using WithTransaction.
-	session, err := s.client.StartSession()
+	_, err := collection.UpdateOne(ctx, findQuert, query, &options.UpdateOptions{Upsert: aws.Bool(true)})
 	if err != nil {
-		level.Error(s.logger).Log("message", "could not start transaction from mongo", "error", err)
+		level.Error(s.logger).Log("error", err, "message", "could not save player stats", "player_key", playerKey, "season", season, "week", week)
 		return err
 	}
-	defer session.EndSession(ctx)
-	_, err = session.WithTransaction(ctx, callback)
-	if err != nil {
-		level.Error(s.logger).Log("message", "could not save transaction from mongo", "error", err)
-		return err
-	}
-
 	return nil
 }
+
+//
+//func (s StatsRepo) SavePlayerStats(ctx context.Context, playerKey string, season, week string, stats []pkgEntities.PlayerStat) error {
+//	span, ctx := apm.StartSpan(ctx, "SavePlayerStats", "repository.Mongo")
+//	defer span.End()
+//
+//	collection := s.client.Database("fdr").Collection("player_stats")
+//	findQuert := bson.M{"player_key": playerKey}
+//	query := bson.M{"$set": bson.M{"player_key": playerKey, "stats_by_season": bson.M{season: bson.M{week: stats}}}}
+//
+//	var playerStatBson pkgEntities.PlayerStats
+//	playerStatBson.PlayerID = playerKey
+//
+//	callback := func(sessCtx mongo.SessionContext) (interface{}, error) {
+//		// Important: You must pass sessCtx as the Context parameter to the operations for them to be executed in the
+//		// transaction.
+//		if _, err := collection.UpdateOne(sessCtx, findQuert, query, &options.UpdateOptions{Upsert: aws.Bool(true)}); err != nil {
+//			return nil, err
+//		}
+//		return nil, nil
+//	}
+//
+//	// Step 2: Start a session and run the callback using WithTransaction.
+//	session, err := s.client.StartSession()
+//	if err != nil {
+//		level.Error(s.logger).Log("message", "could not start transaction from mongo", "error", err)
+//		return err
+//	}
+//	defer session.EndSession(ctx)
+//	_, err = session.WithTransaction(ctx, callback)
+//	if err != nil {
+//		level.Error(s.logger).Log("message", "could not save transaction from mongo", "error", err)
+//		return err
+//	}
+//
+//	return nil
+//}

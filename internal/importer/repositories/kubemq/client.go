@@ -6,7 +6,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	kubemq "github.com/kubemq-io/protobuf/go"
-	"github.com/thethan/fdr-users/internal/yahoo/importer/entities"
+	"github.com/thethan/fdr-users/internal/importer/entities"
 	"go.elastic.co/apm"
 	"strconv"
 	"time"

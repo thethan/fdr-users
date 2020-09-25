@@ -5,21 +5,20 @@ go 1.13
 require (
 	cloud.google.com/go/firestore v1.2.0
 	firebase.google.com/go v3.12.1+incompatible
-	github.com/aws/aws-sdk-go v1.27.0
+	github.com/aws/aws-sdk-go v1.29.15
 	github.com/caarlos0/env v3.5.0+incompatible
 	github.com/go-kit/kit v0.10.0
 	github.com/gogo/protobuf v1.3.1
-	github.com/golang/protobuf v1.4.1 // indirect
 	github.com/google/uuid v1.1.1
 	github.com/gorilla/handlers v1.4.2
-	github.com/gorilla/mux v1.7.4
+	github.com/gorilla/mux v1.8.0
 	github.com/grpc-ecosystem/go-grpc-middleware v1.2.0
 	github.com/kubemq-io/kubemq-go v1.4.0
 	github.com/kubemq-io/protobuf v1.1.0
 	github.com/oklog/run v1.1.0
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.6.0
-	github.com/stretchr/testify v1.5.1
+	github.com/stretchr/testify v1.6.1
 	github.com/thethan/fdr_proto v0.0.0-20200417043340-bff7591e2122
 	go.elastic.co/apm v1.8.0
 	go.elastic.co/apm/module/apmgorilla v1.8.0
@@ -27,9 +26,17 @@ require (
 	go.elastic.co/apm/module/apmhttp v1.8.0
 	go.elastic.co/apm/module/apmlogrus v1.8.0
 	go.elastic.co/apm/module/apmmongo v1.8.0
-	go.mongodb.org/mongo-driver v1.3.3
-	golang.org/x/net v0.0.0-20200324143707-d3edc9973b7e
+	go.mongodb.org/mongo-driver v1.4.0
+	go.opencensus.io v0.22.4
+	go.opentelemetry.io/contrib/instrumentation/github.com/gorilla/mux v0.11.0
+	go.opentelemetry.io/contrib/instrumentation/go.mongodb.org/mongo-driver v0.11.0
+	go.opentelemetry.io/contrib/instrumentation/net/http/httptrace v0.11.0
+	go.opentelemetry.io/otel v0.11.0
+	go.opentelemetry.io/otel/exporters/metric/prometheus v0.11.0
+	go.opentelemetry.io/otel/exporters/trace/jaeger v0.11.0
+	go.opentelemetry.io/otel/sdk v0.11.0
+	golang.org/x/net v0.0.0-20200707034311-ab3426394381
 	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
-	google.golang.org/api v0.23.0
-	google.golang.org/grpc v1.29.1
+	google.golang.org/api v0.30.0
+	google.golang.org/grpc v1.31.0
 )

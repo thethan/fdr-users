@@ -10,7 +10,7 @@ type Draft struct {
 
 //
 //type DraftResult struct {
-//	PlayerKey    PlayerSeason `json:"player" bson:"players"`
+//	PlayerKey    PlayerSeason `json:"player" bson:"fdr-players-import"`
 //	LeagueKey string       `json:"league_key" bson:"-"`
 //	Cost      string       `json:"cost" bson:"cost"`
 //	TeamKey      TeamKey        `json:"team" bson:"team"`

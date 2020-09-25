@@ -14,20 +14,28 @@ import (
 	"github.com/grpc-ecosystem/go-grpc-middleware"
 	grpc_auth "github.com/grpc-ecosystem/go-grpc-middleware/auth"
 	"github.com/oklog/run"
-	"github.com/thethan/fdr-users/internal/yahoo/importer"
+	players2 "github.com/thethan/fdr-users/internal/importer/players"
+	yahoo2 "github.com/thethan/fdr-users/internal/importer/repositories/yahoo"
 	"github.com/thethan/fdr-users/pkg/coordinator/transports"
 	"github.com/thethan/fdr-users/pkg/draft"
 	"github.com/thethan/fdr-users/pkg/draft/repositories"
 	draftTransports "github.com/thethan/fdr-users/pkg/draft/transports"
-	repositories2 "github.com/thethan/fdr-users/pkg/users/repositories"
-
 	"github.com/thethan/fdr-users/pkg/kubemq"
 	"github.com/thethan/fdr-users/pkg/league"
 	"github.com/thethan/fdr-users/pkg/mongo"
 	"github.com/thethan/fdr-users/pkg/players"
+	"github.com/thethan/fdr-users/pkg/players/entities"
+	"github.com/thethan/fdr-users/pkg/players/importer/queue"
+	repositories3 "github.com/thethan/fdr-users/pkg/players/repositories"
 	playersTransport "github.com/thethan/fdr-users/pkg/players/transports"
+	repositories2 "github.com/thethan/fdr-users/pkg/users/repositories"
 	"github.com/thethan/fdr-users/pkg/yahoo"
 	"go.elastic.co/apm/module/apmgorilla"
+	"go.opentelemetry.io/otel/api/global"
+	"go.opentelemetry.io/otel/exporters/trace/jaeger"
+	"go.opentelemetry.io/otel/label"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"golang.org/x/oauth2"
 	"net/http"
 	"os/signal"
 	"strings"
@@ -44,11 +52,10 @@ import (
 	"github.com/thethan/fdr-users/pkg/coordinator"
 	"go.elastic.co/apm"
 	"go.elastic.co/apm/module/apmlogrus"
+	"go.opentelemetry.io/otel/exporters/metric/prometheus"
+	"google.golang.org/grpc"
 	"net"
 	"os"
-
-	// 3d Party
-	"google.golang.org/grpc"
 
 	"github.com/thethan/fdr-users/handlers"
 	"github.com/thethan/fdr-users/pkg/users"
@@ -71,6 +78,8 @@ type KubemqConfig struct {
 	ClientID string `env:"POD_NAME"`
 	Port     int    `env:"KUBEMQ_PORT" envDefault:"50000"`
 }
+
+var oauthConfig *oauth2.Config
 
 var logrusLogger = &logrus.Logger{
 	Out:       os.Stdout,
@@ -106,14 +115,58 @@ func init() {
 		os.Exit(1)
 	}
 
+	oauthConfig = &oauth2.Config{
+		RedirectURL:  os.Getenv("YAHOO_CLIENT_REDIRECT"),
+		ClientID:     os.Getenv("YAHOO_CLIENT_ID"),
+		ClientSecret: os.Getenv("YAHOO_CLIENT_SECRET"),
+		Scopes:       []string{"fspt-w"},
+		Endpoint:     yahoo.Endpoint,
+	}
+
 	apm.DefaultTracer.SetLogger(logrusLogger)
 	logrusLogger.AddHook(&apmlogrus.Hook{})
+}
+
+// initTracer creates a new trace provider instance and registers it as global trace provider.
+func initTracer() func() {
+	// Create and install Jaeger export pipeline
+	flush, err := jaeger.InstallNewPipeline(
+		jaeger.WithCollectorEndpoint(os.Getenv("JAEGER_ENDPOINT")),
+		jaeger.WithProcess(jaeger.Process{
+			ServiceName: "fdr-users",
+			Tags: []label.KeyValue{
+				label.String("exporter", "jaeger"),
+				label.Float64("float", 312.23),
+			},
+		}),
+		jaeger.WithSDK(&sdktrace.Config{DefaultSampler: sdktrace.AlwaysSample()}),
+	)
+	if err != nil {
+		panic("tracerr not made")
+	}
+
+	return func() {
+		flush()
+	}
+}
+
+func initMeter() *prometheus.Exporter {
+	exporter, err := prometheus.InstallNewPipeline(prometheus.Config{})
+	if err != nil {
+		panic("Could not init Meter")
+	}
+	return exporter
 }
 
 // Run starts a new http server, gRPC server, and a debug server with the
 // passed config and logger
 func main() {
 	ctx := context.Background()
+	exporter := initMeter()
+	initTracer()
+
+	_ = global.Tracer("fantasy.com/users")
+	_ = global.Meter("fantasy.com/users")
 
 	logger := gokitLogrus.NewLogrusLogger(logrusLogger)
 	logger = log.WithPrefix(logger, "caller_a", log.DefaultCaller, "caller_b", log.Caller(2), "caller_c", log.Caller(1))
@@ -127,7 +180,7 @@ func main() {
 
 	yahooProvider := yahoo.NewService(logger, &repo)
 
-	mongoClient, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
+	mongoClient, err := mongo.NewMongoDBClient(ctx, os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
 	if err != nil {
 		logger.Log("message", "error in initializing mongo client", "error", err)
 		os.Exit(1)
@@ -139,6 +192,11 @@ func main() {
 	oauthRepo := repositories2.NewMongoOauthRepository(logger, mongoClient)
 	endpoints := users.NewEndpoints(logger, &repo, &repo, &oauthRepo, &importService, authSvc.NewAuthMiddleware(), authSvc.ServerBefore)
 
+	//err := func(ctx context.Context) {
+	//	var span trace.Span
+	//	ctx, span = tracer.Start(ctx, "Starting service ...")
+	//	span.End(trace.WithEndTime(time.Now()))
+	//}(ctx)
 	var kubemqConfig KubemqConfig
 	err = env.Parse(&kubemqConfig)
 	if err != err {
@@ -171,7 +229,7 @@ func main() {
 	draftService := draft.NewService(logger, mongoRepo, &kubemqDraftRepo)
 	draftEndpoints := draft.NewEndpoints(logger, &draftService, &authSvc, authSvc.NewAuthMiddleware(), authSvc.GetUserInfoFromContextMiddleware(&repo))
 
-	// players
+	// fdr-players-import
 	playerService := players.NewService(logger, mongoRepo)
 	playersEndpoint := players.NewEndpoint(logger, &playerService, authSvc.NewAuthMiddleware(), authSvc.GetUserInfoFromContextMiddleware(&repo))
 
@@ -179,8 +237,14 @@ func main() {
 	draftTransports.MakeHTTPHandler(logger, draftEndpoints, ogGrouter, authSvc.ServerBefore)
 	playersTransport.MakeHTTPHandler(logger, playersEndpoint, ogGrouter, authSvc.ServerBefore)
 
+	// player stats repo
+	importPlayerStat := make(chan entities.ImportPlayerStat, 1)
+	importPlayerChannel := make(chan entities.ImportPlayer, 1)
+	queuer := queue.NewQueueImportStats(logger, kubemqClient)
+	yahooService := yahoo2.NewYahooRepository(logger, oauthConfig)
+	statsRepo := repositories3.NewMongoStatsRepo(logger, mongoClient)
 	// new importer
-	importer.NewImporterClient(logger, mongoRepo, )
+	importerService := players2.NewImporterClient(logger, &mongoRepo, &queuer, &yahooService, statsRepo)
 	// Mechanical domain.
 	errc := make(chan error)
 
@@ -220,7 +284,7 @@ func main() {
 	{
 		g.Add(func() error {
 			ln, _ := net.Listen("tcp", DefaultConfig.HTTPAddr)
-
+			http.HandleFunc("/", exporter.ServeHTTP)
 			return http.Serve(ln,
 				muxhandlers.CORS(muxhandlers.AllowedHeaders([]string{
 					"X-Requested-With",
@@ -253,7 +317,38 @@ func main() {
 			return s.Serve(ln)
 		}, func(err error) {
 		})
-
+	}
+	{
+		// sender
+		g.Add(func() error {
+			return queuer.StartPlayerWorker(ctx, importPlayerChannel)
+		}, func(err error) {
+			errc <- err
+		})
+	}
+	{
+		// worker
+		g.Add(func() error {
+			return queuer.StartWorker(ctx, importPlayerStat)
+		}, func(err error) {
+			errc <- err
+		})
+	}
+	{
+		// workerProcessor
+		g.Add(func() error {
+			return importerService.Start(ctx, importPlayerStat)
+		}, func(err error) {
+			errc <- err
+		})
+	}
+	{
+		// workerProcessor
+		g.Add(func() error {
+			return importerService.StartPlayersWorker(ctx, importPlayerChannel)
+		}, func(err error) {
+			errc <- err
+		})
 	}
 	{
 		g.Add(func() error {

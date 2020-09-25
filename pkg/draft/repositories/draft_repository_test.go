@@ -163,7 +163,7 @@ func TestMongoRepository_GetAvailablePlayersForDraft(t *testing.T) {
 		}
 
 	})
-	t.Run("get players by positions", func(t *testing.T) {
+	t.Run("get fdr-players-import by positions", func(t *testing.T) {
 		players, err := mongoRepo.GetAvailablePlayersForDraft(context.TODO(), 390, leagueKey, 150, 0, []string{"QB", "WR"}, "")
 		assert.Nil(t, err)
 		assert.Equal(t, 150, len(players))

@@ -2,7 +2,9 @@ package league
 
 import (
 	"context"
+	"errors"
 	"github.com/go-kit/kit/log/level"
+	"github.com/thethan/fdr-users/pkg/auth"
 	"github.com/thethan/fdr-users/pkg/draft/entities"
 	"github.com/thethan/fdr-users/pkg/yahoo"
 	"go.elastic.co/apm"
@@ -10,8 +12,6 @@ import (
 )
 
 func (i Importer) ImportGamePlayers(ctx context.Context, gameID int) error {
-	span, ctx := apm.StartSpan(ctx, "ImportGamePlayers", "service.importer")
-	defer span.End()
 	// count is 25
 	counter := 0
 	count := 25
@@ -31,11 +31,10 @@ func (i Importer) ImportGamePlayers(ctx context.Context, gameID int) error {
 		players := transformPlayerResponseToPlayers(ctx, gameID, res, startingCounter)
 		_, err = i.repo.SavePlayers(ctx, players)
 		if err != nil {
-			level.Error(i.logger).Log("message", "could not save players", "error", err)
+			level.Error(i.logger).Log("message", "could not save fdr-players-import", "error", err)
 		}
 		counter++
 	}
-
 	return nil
 }
 
@@ -45,34 +44,12 @@ type ImportStats struct {
 }
 
 func (i Importer) ImportPlayerStats(ctx context.Context, gameID int) error {
-	//span, ctx := apm.StartSpan(ctx, "ImportPlayerStats", "service.importer")
-	//defer span.End()
-	//// count is 25
-	//counter := 1
-	//count := 17
-	//
-	//users.OauthConfig.Client(ctx, )
-	//var fin bool
-	//for !fin {
-	//	startingCounter := count * counter
-	//	res, err := i.yahooService.GetPlayerResourcesStats(ctx, gameID, startingCounter, count)
-	//	if err != nil {
-	//		// complain
-	//		level.Error(i.logger).Log("error", err)
-	//		return err
-	//
-	//	}
-	//	if len(res.Game.Players.Player) < 25 {
-	//		fin = true
-	//	}
-	//	players := transformPlayerResponseToPlayers(ctx, gameID, res, startingCounter)
-	//	_, err = i.repo.SavePlayers(ctx, players)
-	//	if err != nil {
-	//		level.Error(i.logger).Log("message", "could not save players", "error", err)
-	//	}
-	//	counter++
-	//}
-
+	user, ok := ctx.Value(auth.User).(entities.User)
+	if !ok {
+		return errors.New("could not get user from auth")
+	}
+	// get guid from context
+	i.playerImporter.QueuePlayersStats(ctx, user.Guid)
 	return nil
 }
 
@@ -81,7 +58,10 @@ func (i Importer) ImportGamePlayersUserHasAccessTo(ctx context.Context, guid str
 	defer func() {
 		span.End()
 	}()
-
+	user, ok := ctx.Value(auth.User).(entities.User)
+	if !ok {
+		return errors.New("could not get user from auth")
+	}
 	gameHashMap := make(map[int]bool)
 	leagues, err := i.repo.GetTeamsForManagers(ctx, guid)
 	if err != nil {
@@ -89,7 +69,8 @@ func (i Importer) ImportGamePlayersUserHasAccessTo(ctx context.Context, guid str
 	}
 	for _, league := range leagues {
 		if imported, ok := gameHashMap[league.Game.GameID]; !imported || !ok {
-			err = i.ImportGamePlayers(ctx, league.Game.GameID)
+			go i.playerImporter.QueueAllPlayers(ctx, user.Guid, league.Game.GameID)
+			//err = i.ImportGamePlayers(ctx, league.Game.GameID)
 			if err != nil {
 				level.Error(i.logger).Log("message", "error in importing game", "err", err, "game_id", league.Game.GameID)
 			}
@@ -157,7 +138,7 @@ func transformYahooSeasonStats(ctx context.Context, yahooPlayer yahoo.GameResour
 	for idx, stat := range yahooPlayer.PlayerStats.Stats {
 		playerStats[idx] = entities.PlayerStat{
 			StatID: stat.StatID,
-			Value:  stat.Value,
+			Value:  float64(stat.Value),
 		}
 	}
 	return playerStats

@@ -20,7 +20,7 @@ image:
   ## Bitnami MongoDB image tag
   ## ref: https://hub.docker.com/r/bitnami/mongodb/tags/
   ##
-  tag: 4.2.6-debian-10-r23
+  tag: 4.4.1-debian-10-r0
   ## Specify a imagePullPolicy
   ## ref: http://kubernetes.io/docs/user-guide/images/#pre-pulling-images
   ##
@@ -70,6 +70,16 @@ volumePermissions:
     #   - myRegistryKeySecretName
   resources: {}
 
+
+auth:
+  ## Enable authentication
+  ## ref: https://docs.mongodb.com/manual/tutorial/enable-authentication/
+  ##
+  enabled: true
+  ## MongoDB root password
+  ## ref: https://github.com/bitnami/bitnami-docker-mongodb/blob/master/README.md#setting-the-root-password-on-first-run
+  ##
+  rootPassword: "For3v3r!nBlu3J3ans"
 ## Enable authentication
 ## ref: https://docs.mongodb.com/manual/tutorial/enable-authentication/
 #
@@ -79,7 +89,6 @@ usePassword: true
 ## MongoDB admin password
 ## ref: https://github.com/bitnami/bitnami-docker-mongodb/blob/master/README.md#setting-the-root-password-on-first-run
 ##
-mongodbRootPassword: For3v3r!nBlu3J3ans
 
 ## MongoDB custom user and database
 ## ref: https://github.com/bitnami/bitnami-docker-mongodb/blob/master/README.md#creating-a-user-and-database-on-first-run

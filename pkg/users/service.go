@@ -274,7 +274,7 @@ func (service usersService) YahooCallback(ctx context.Context, r *http.Request) 
 	}
 	_ = level.Debug(service.logger).Log("msg", "about to save guid", "guid", guid)
 	go func() {
-		// todo queue import
+		// todo queue importer
 		// QueuePlayers
 	}()
 	return service.oauthRepo.SaveOauthToken(ctx, guid, *token)

@@ -51,7 +51,7 @@ func TestImporter_ImportLeagueFromUser(t *testing.T) {
 
 	yahooService := yahoo.NewService(logger, &mockUserInfo)
 
-	mongoClient, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
+	mongoClient, err := mongo.NewMongoDBClient(context.TODO(),os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
 	if err != nil {
 		logger.Log("message", "error in initializing mongo client", "error", err)
 		t.FailNow()
@@ -96,7 +96,7 @@ func TestImporter_ImportGamePlayers(t *testing.T) {
 
 	yahooService := yahoo.NewService(logger, &mockUserInfo)
 
-	mongoClient, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"),os.Getenv("MONGO_PORT"))
+	mongoClient, err := mongo.NewMongoDBClient(context.TODO(),os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"),os.Getenv("MONGO_PORT"))
 	if err != nil {
 		logger.Log("message", "error in initializing mongo client", "error", err)
 		t.FailNow()
@@ -133,7 +133,7 @@ func TestImporter_ImportDraftResult(t *testing.T) {
 
 	yahooService := yahoo.NewService(logger, &mockUserInfo)
 
-	mongoClient, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
+	mongoClient, err := mongo.NewMongoDBClient(context.TODO(),os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
 	if err != nil {
 		logger.Log("message", "error in initializing mongo client", "error", err)
 		t.FailNow()
@@ -170,7 +170,7 @@ func TestImporter_ImportDraftResultForUser(t *testing.T) {
 
 	yahooService := yahoo.NewService(logger, &mockUserInfo)
 
-	mongoClient, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
+	mongoClient, err := mongo.NewMongoDBClient(context.TODO(),os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
 	if err != nil {
 		logger.Log("message", "error in initializing mongo client", "error", err)
 		t.FailNow()
@@ -207,7 +207,7 @@ func TestImporter_ImportPlayersFromGamesForUser(t *testing.T) {
 
 	yahooService := yahoo.NewService(logger, &mockUserInfo)
 
-	mongoClient, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
+	mongoClient, err := mongo.NewMongoDBClient(context.TODO(),os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
 	if err != nil {
 		logger.Log("message", "error in initializing mongo client", "error", err)
 		t.FailNow()

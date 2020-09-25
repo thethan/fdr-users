@@ -6,6 +6,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	kubemq "github.com/kubemq-io/protobuf/go"
+	"github.com/thethan/fdr-users/internal/importer/players"
 	"github.com/thethan/fdr-users/pkg/draft/entities"
 	"github.com/thethan/fdr-users/pkg/yahoo"
 	"go.elastic.co/apm"
@@ -122,9 +123,10 @@ func (d *dataTransferObjects) addLeagueToLeagueGroup(parentLeagueID int, league 
 type Importer struct {
 	logger log.Logger
 
-	yahooService *yahoo.Service
-	repo         SaveLeagueInfoIFace
-	queue        kubemq.KubemqClient
+	yahooService   *yahoo.Service
+	repo           SaveLeagueInfoIFace
+	queue          kubemq.KubemqClient
+	playerImporter *players.Service
 }
 
 func NewImportService(logger log.Logger, yahooService *yahoo.Service, repo SaveLeagueInfoIFace) Importer {
@@ -354,24 +356,10 @@ func (i *Importer) ImportDraftResults(ctx context.Context, leagueKey string) (en
 		level.Error(i.logger).Log("error ", err, "message", "error returned from getting teams")
 		return entities.Draft{}, err
 	}
-	//playerKeys := make([]string, len(results))
-	//playerKeyToDraftRes := make(map[string]int, len(results)) // playerKey to draft index
-	//draftResultToTeamKey := make(map[int]string, len(results))
-	//
-	//// get all teams with league keys
-	//// find leagues
-	//players, err := i.repo.GetPlayers(ctx, playerKeys)
-	// find teams
 	draft := entities.Draft{
 		ID:           leagueKey,
 		DraftResults: nil,
 	}
-
-	//err = i.repo.SaveDraft(ctx, draft)
-	//if err != nil {
-	//	level.Error(i.logger).Log("message", "error in saving draft", "error", err)
-	//	return draft, err
-	//}
 
 	// get draft Order
 	teamOrder := make([]string, res.League.NumTeams)
@@ -404,7 +392,6 @@ func (i *Importer) ImportDraftResults(ctx context.Context, leagueKey string) (en
 			level.Error(i.logger).Log("message", "error in draft result saving", "error", err)
 			return draft, err
 		}
-
 	}
 	err = i.repo.SaveDraftOrder(ctx, draft.ID, teamOrder)
 
@@ -451,16 +438,6 @@ func transformGameResponseToGame(res yahoo.YahooGame) entities.Game {
 func transformTeamResponseToTeam(res yahoo.TeamResponse) entities.Team {
 	return entities.Team{}
 }
-
-//func transformLeagueResponseToTeam(res yahoo.YahooLeague) League {
-//	return League{
-//		ID:           primitive.ObjectID{},
-//		Settings:     nil,
-//		DraftResults: nil,
-//		Teams:        make([]TeamKey),
-//		Game:         Game{},
-//	}
-//}
 
 func transformYahooLeagueSettingsToLeagueSettings(response *yahoo.LeagueResourcesSettingsResponse) entities.LeagueSettings {
 	leagueSettings := entities.LeagueSettings{

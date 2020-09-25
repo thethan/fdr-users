@@ -1,0 +1,24 @@
+apiVersion: getambassador.io/v2
+kind:  Mapping
+metadata:
+  name: {{ include "fdr-users.fullname" . }}-http-mapping
+spec:
+  prefix: /fdr/
+  service: {{ include "fdr-users.fullname" . }}.default:{{ .Values.service.port }}
+  cors:
+    origins: '*'
+{{/*    origins: http://localhost:3000,https://fantasydraftroom.com,https://puretotten.com*/}}
+    methods:
+    - POST
+    - PUT
+    - GET
+    - OPTIONS
+    headers:
+    - Content-Type
+    - Authorization
+    - Referer
+    - User-Agent
+    max_age: "86400"
+    credentials: true
+    # want this reduce this but we are at the behest of yahoo taking a minute on yahoo oauth
+{{/*  timeout_ms: 7000*/}}

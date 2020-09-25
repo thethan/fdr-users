@@ -1,0 +1,94 @@
+# Default values for fdr-fdr-users.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 1
+
+image:
+  repository: registry.digitalocean.com/thethan/fdr-users
+  pullPolicy: IfNotPresent
+  tag: oauth25
+
+#
+imagePullSecrets:
+  - name: registry-thethan
+nameOverride: ""
+fullnameOverride: ""
+
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name:
+
+podSecurityContext: {}
+# fsGroup: 2000
+
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+# runAsNonRoot: true
+# runAsUser: 1000
+
+service:
+  type: ClusterIP
+  port: 8081
+  grpc: 8082
+
+
+ingress:
+  enabled: false
+  annotations: {}
+  # kubernetes.io/ingress.class: nginx
+  # kubernetes.io/tls-acme: "true"
+  hosts:
+    - host: chart-example.local
+      paths: []
+  tls: []
+  #  - secretName: chart-example-tls
+  #    hosts:
+  #      - chart-example.local
+
+resources: {}
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+#   cpu: 100m
+#   memory: 128Mi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+yahoo:
+  key: "dj0yJmk9OHdjb2dBT0lZc3NUJmQ9WVdrOWIzazJSRlJQTTJVbWNHbzlNQS0tJnM9Y29uc3VtZXJzZWNyZXQmc3Y9MCZ4PWJk"
+  secret: "b4a56c531555dcad66b682a3a71cefccf47f89fd"
+  callback: "https://fantasydraftroom.com/fdr/users/auth"
+session:
+  secret: oiejhf89ehfjoif
+  name: _gothic_session
+ambassador:
+  host: "https://fantasydraftroom.com"
+apm:
+  url: "https://b017d849c96d4a858faac67a0769c06b.apm.us-west-1.aws.cloud.es.io:443"
+  token: "1YkgEGKiCKGdX9XwlT"
+mongo:
+  host: mongodb.default
+  username: root
+  password: For3v3r!nBlu3J3ans
+  port: 27017
+
+kubemq:
+  service: kubemq-cluster-grpc.kubemq
+  port: 50000

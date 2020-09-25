@@ -308,7 +308,7 @@ type GameResourcePlayer struct {
 		IsUndroppable         string   `json:"is_undroppable"`
 		PositionType          string   `json:"position_type"`
 		EligiblePositions     []string `json:"eligible_positions"`
-	} `json:"players"`
+	} `json:"fdr-players-import"`
 }
 type GameResourcePlayerResponse struct {
 	XMLName     xml.Name `xml:"fantasy_content"`
@@ -336,7 +336,7 @@ type GameResourcePlayerResponse struct {
 			Text   string                    `xml:",chardata"`
 			Count  string                    `xml:"count,attr"`
 			Player []GameResourcePlayerStats `xml:"player"`
-		} `xml:"players"`
+		} `xml:"fdr-players-import"`
 	} `xml:"game"`
 }
 
@@ -393,7 +393,7 @@ type PlayerStat struct {
 // GetGameResourcesLeagues
 func (s *Service) GetGameResourcesPlayers(ctx context.Context, gameKey int, start, count int) (GameResourcePlayerResponse, error) {
 
-	url := fmt.Sprintf("https://fantasysports.yahooapis.com/fantasy/v2/game/%d/players/stats?start=%d&count=%d", gameKey, start, count)
+	url := fmt.Sprintf("https://fantasysports.yahooapis.com/fantasy/v2/game/%d/fdr-players-import/stats?start=%d&count=%d", gameKey, start, count)
 	res, err := s.get(ctx, url)
 
 	v := GameResourcePlayerResponse{}
@@ -1917,7 +1917,7 @@ type LeagueResourcesTransaction struct {
 		Type           string        `json:"type"`
 		Status         string        `json:"status"`
 		Timestamp      string        `json:"timestamp"`
-		Players        []interface{} `json:"players"`
+		Players        []interface{} `json:"fdr-players-import"`
 	} `json:"transactions"`
 }
 type LeagueResourcesTransactionResponse struct {
@@ -1999,7 +1999,7 @@ type LeagueResourcesTransactionResponse struct {
 							SourceTeamName      string `xml:"source_team_name"`
 						} `xml:"transaction_data"`
 					} `xml:"player"`
-				} `xml:"players"`
+				} `xml:"fdr-players-import"`
 			} `xml:"transaction"`
 		} `xml:"transactions"`
 	} `xml:"league"`
@@ -2101,7 +2101,7 @@ type GetLeagueResourcesPlayersResponse struct {
 				HasPlayerNotes           string `xml:"has_player_notes"`
 				PlayerNotesLastTimestamp string `xml:"player_notes_last_timestamp"`
 			} `xml:"player"`
-		} `xml:"players"`
+		} `xml:"fdr-players-import"`
 	} `xml:"league"`
 }
 type GetLeagueResourcesPlayersStatsResponse struct {
@@ -2204,7 +2204,7 @@ type GetLeagueResourcesPlayersStatsResponse struct {
 					Total        string `xml:"total"`
 				} `xml:"player_points"`
 			} `xml:"player"`
-		} `xml:"players"`
+		} `xml:"fdr-players-import"`
 	} `xml:"league"`
 }
 
@@ -2215,7 +2215,7 @@ func (s *Service) GetLeagueResourcesPlayers(leagueKey string, playerKeys []strin
 	if week > 0 {
 		weekString = fmt.Sprintf(";type=week;week=%d", week)
 	}
-	url := fmt.Sprintf("https://fantasysports.yahooapis.com/fantasy/v2/league/%s/players;player_keys=%s/stats%s", leagueKey, playerKeyStrings, weekString)
+	url := fmt.Sprintf("https://fantasysports.yahooapis.com/fantasy/v2/league/%s/fdr-players-import;player_keys=%s/stats%s", leagueKey, playerKeyStrings, weekString)
 	res, err := s.Get(url)
 
 	if err != nil {
@@ -2645,13 +2645,13 @@ type PlayerResourcesOwnershipResponse struct {
 					WaiverDate    string `xml:"waiver_date"`
 				} `xml:"ownership"`
 			} `xml:"player"`
-		} `xml:"players"`
+		} `xml:"fdr-players-import"`
 	} `xml:"league"`
 }
 
 func (s *Service) GetPlayerResourcesOwnership(leagueKey, playerKey string) (*PlayerResourcesOwnership, error) {
 
-	url := fmt.Sprintf("https://fantasysports.yahooapis.com/fantasy/v2/league/%s/players;player_keys=%s/ownership", leagueKey, playerKey)
+	url := fmt.Sprintf("https://fantasysports.yahooapis.com/fantasy/v2/league/%s/fdr-players-import;player_keys=%s/ownership", leagueKey, playerKey)
 	res, err := s.Get(url)
 
 	if err != nil {
@@ -2911,7 +2911,7 @@ type RosterResourcesPlayersResponse struct {
 					Status                   string `xml:"status"`
 					StatusFull               string `xml:"status_full"`
 				} `xml:"player"`
-			} `xml:"players"`
+			} `xml:"fdr-players-import"`
 		} `xml:"roster"`
 	} `xml:"team"`
 }
@@ -3387,7 +3387,7 @@ type TeamResourcesRosterResponse struct {
 					Status                   string `xml:"status"`
 					StatusFull               string `xml:"status_full"`
 				} `xml:"player"`
-			} `xml:"players"`
+			} `xml:"fdr-players-import"`
 		} `xml:"roster"`
 	} `xml:"team"`
 }
@@ -3750,7 +3750,7 @@ type TransactionsResourcesMeta struct {
 			SourceTeamKey       string `json:"source_team_key"`
 			SourceTeamName      string `json:"source_team_name"`
 		} `json:"transaction_data,omitempty"`
-	} `json:"players"`
+	} `json:"fdr-players-import"`
 }
 
 func (s *Service) GetTransactionsResourcesMeta(teamKey string) (*TransactionsResourcesMeta, error) {
@@ -3795,7 +3795,7 @@ type TransactionsResourcesPlayers struct {
 			SourceTeamKey       string `json:"source_team_key"`
 			SourceTeamName      string `json:"source_team_name"`
 		} `json:"transaction_data,omitempty"`
-	} `json:"players"`
+	} `json:"fdr-players-import"`
 }
 type TransactionsResourcesPlayersResponse struct {
 	XMLName     xml.Name `xml:"fantasy_content"`
@@ -3843,13 +3843,13 @@ type TransactionsResourcesPlayersResponse struct {
 					SourceTeamName      string `xml:"source_team_name"`
 				} `xml:"transaction_data"`
 			} `xml:"player"`
-		} `xml:"players"`
+		} `xml:"fdr-players-import"`
 	} `xml:"transaction"`
 }
 
 func (s *Service) GetTransactionsResourcesPlayers(teamKey string) (*TransactionsResourcesPlayers, error) {
 
-	url := fmt.Sprintf("https://fantasysports.yahooapis.com/fantasy/v2/transaction/%s/players", teamKey)
+	url := fmt.Sprintf("https://fantasysports.yahooapis.com/fantasy/v2/transaction/%s/fdr-players-import", teamKey)
 	res, err := s.Get(url)
 
 	if err != nil {

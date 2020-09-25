@@ -41,7 +41,7 @@ type GetAvailablePlayersRequest struct {
 type GetAvailablePositionsForLeague struct {
 	PlayerMap  map[string]entities.LeaguePlayer `json:"player_map"`
 	PlayerKeys []string                         `json:"ap"`
-	Players    []entities.LeaguePlayer          `json:"players"`
+	Players    []entities.LeaguePlayer          `json:"fdr-players-import"`
 	Meta       Meta                             `json:"meta"`
 	DoNotDraft []string                         `json:"dnd"`
 	Pref       []string                         `json:"pref"`
@@ -129,7 +129,7 @@ func makeNewGetAvailablePlayers(logger log.Logger, service *Service, ) endpoint.
 			}
 		}(wg)
 		wg.Wait()
-		//newPlayerKeysAvail := make([]string, 0, len(players))
+		//newPlayerKeysAvail := make([]string, 0, len(fdr-players-import))
 		//wg.Add(1)
 		//go func(wg *sync.WaitGroup) {
 		//	defer wg.Done()

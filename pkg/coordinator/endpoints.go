@@ -6,6 +6,9 @@ import (
 	"github.com/go-kit/kit/endpoint"
 	"github.com/sirupsen/logrus"
 	"github.com/thethan/fdr-users/pkg/league"
+	"go.opentelemetry.io/otel/api/trace"
+	"go.opentelemetry.io/otel/label"
+	"log"
 
 	"go.elastic.co/apm"
 )
@@ -50,6 +53,24 @@ func makeImportGamePlayers(logger logrus.FieldLogger, service league.Importer) e
 		defer span.End()
 
 		req, ok := request.(ImportGamePlayersRequest)
+		if !ok {
+			return nil, errors.New("bad request")
+		}
+
+		err = service.ImportGamePlayers(ctx, req.GameID)
+		return nil, err
+	}
+}
+
+func makeImportGamePlayersStats(logger log.Logger, service league.Importer) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		span := trace.SpanFromContext(ctx)
+		span.AddEvent(ctx, "makeImportGamePlayersStats", label.String("game_id", ))
+		defer span.End()
+
+		req, ok := request.(ImportGamePlayersRequest)
+		span.SetAttribute("game_id", req.GameID)
+
 		if !ok {
 			return nil, errors.New("bad request")
 		}

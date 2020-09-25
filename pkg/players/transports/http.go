@@ -70,7 +70,7 @@ func MakeHTTPHandler(logger log.Logger, endpoints players.Endpoints, m *mux.Rout
 	))
 	return m
 
-	m.Methods(http.MethodPut).Path("/{+" + userGuid + "}/{" + leagueIdParam + "}/players").Handler(httptransport.NewServer(
+	m.Methods(http.MethodPut).Path("/{+" + userGuid + "}/{" + leagueIdParam + "}/fdr-players-import").Handler(httptransport.NewServer(
 		endpoints.SaveUsersDraftOrder,
 		DecodeHTTPSavePlayersOrders,
 		EncodeHTTPGetAvailablePlayers,

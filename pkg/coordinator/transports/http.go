@@ -24,7 +24,7 @@ func NewHTTPServer(fieldLogger logrus.FieldLogger, m *mux.Router, endpoints coor
 	m.Methods(http.MethodGet).PathPrefix("/importer/leagues").HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.WriteHeader(http.StatusAlreadyReported)
 	})
-	m.Methods(http.MethodGet).PathPrefix("/importer/players").HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	m.Methods(http.MethodGet).PathPrefix("/importer/fdr-players-import").HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.WriteHeader(http.StatusAlreadyReported)
 	})
 

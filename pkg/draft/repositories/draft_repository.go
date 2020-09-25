@@ -22,8 +22,8 @@ import (
 const database string = "fdr"
 const leaguesCollection string = "leagues"
 const draftsCollection string = "draft_results"
-const playersBySeason string = "players"
-const playersByWeek string = "players"
+const playersBySeason string = "fdr-players-import"
+const playersByWeek string = "fdr-players-import"
 const userPreference string = "user_preferences"
 
 type MongoRepository struct {
@@ -96,7 +96,7 @@ func (m MongoRepository) ImportAllAvailablePlayers(ctx context.Context, gameID i
 	models := []mongo.IndexModel{
 		{
 			Keys: bson.M{
-				"players.name.full": "text",
+				"fdr-players-import.name.full": "text",
 			},
 		},
 		{
@@ -106,12 +106,12 @@ func (m MongoRepository) ImportAllAvailablePlayers(ctx context.Context, gameID i
 		},
 		{
 			Keys: bson.M{
-				"players.player_key": 1,
+				"fdr-players-import.player_key": 1,
 			},
 		},
 		{
 			Keys: bson.M{
-				"players.eligiblepositions": 1,
+				"fdr-players-import.eligiblepositions": 1,
 			},
 		},
 		{
@@ -156,7 +156,7 @@ func (m MongoRepository) ImportAllAvailablePlayers(ctx context.Context, gameID i
 type QueryBson struct {
 	ID           primitive.ObjectID    `bson:"_id"`
 	Leagues      entities.League       `bson:"leagues"`
-	Players      entities.PlayerSeason `bson:"players"`
+	Players      entities.PlayerSeason `bson:"fdr-players-import"`
 	DraftResults entities.DraftResult  `bson:"draft_results"`
 }
 
@@ -190,7 +190,7 @@ func (m MongoRepository) GetAvailablePlayersForDraft(ctx context.Context, gameID
 
 	cursor, err := collection.Aggregate(ctx, pipeline, findOptions)
 	if err != nil {
-		level.Error(m.logger).Log("message", "could not get players results", "error", err, "game_id", gameID)
+		level.Error(m.logger).Log("message", "could not get fdr-players-import results", "error", err, "game_id", gameID)
 		return []entities.LeaguePlayer{}, nil
 	}
 

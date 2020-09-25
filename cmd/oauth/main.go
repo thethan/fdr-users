@@ -17,7 +17,7 @@ var (
 
 func init() {
 	oauthConfig = &oauth2.Config{
-		RedirectURL:  os.Getenv("YAHOO_REDIRECT_URL"),
+		RedirectURL:  os.Getenv("YAHOO_CLIENT_REDIRECT"),
 		ClientID:     os.Getenv("YAHOO_CLIENT_ID"),
 		ClientSecret: os.Getenv("YAHOO_CLIENT_SECRET"),
 		Scopes:       []string{"fspt-w"},
