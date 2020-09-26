@@ -49,7 +49,7 @@ func (i Importer) ImportPlayerStats(ctx context.Context, gameID int) error {
 		return errors.New("could not get user from auth")
 	}
 	// get guid from context
-	i.playerImporter.QueuePlayersStats(ctx, user.Guid)
+	i.playerImporter.QueuePlayersStats(ctx, user.Guid, gameID)
 	return nil
 }
 

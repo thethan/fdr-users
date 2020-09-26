@@ -23,7 +23,7 @@ type Queue interface {
 }
 
 type playersRepo interface {
-	GetPlayersByRank(ctx context.Context, limit, offset int) ([]pkgEntities.PlayerSeason, error)
+	GetPlayersByRank(ctx context.Context, limit, offset, gameID int) ([]pkgEntities.PlayerSeason, error)
 	SavePlayers(context.Context, []pkgEntities.PlayerSeason) ([]pkgEntities.PlayerSeason, error)
 }
 
@@ -146,11 +146,11 @@ func transformYahooSeasonStats(ctx context.Context, yahooPlayer yahoo.GameResour
 }
 
 // QueuePlayersStats
-func (c Service) QueuePlayersStats(ctx context.Context, guid string) {
+func (c Service) QueuePlayersStats(ctx context.Context, guid string, gameID int) {
 	limit := 100
 	offset := 0
 	for {
-		players, err := c.playersRepo.GetPlayersByRank(ctx, limit, offset)
+		players, err := c.playersRepo.GetPlayersByRank(ctx, limit, 0, offset)
 		if err != nil {
 			level.Error(c.logger).Log("message", "could not get fdr-players-import by rank", "error", err, "offset", offset, "limit", limit)
 			return

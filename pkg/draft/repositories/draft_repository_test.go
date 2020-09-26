@@ -258,7 +258,7 @@ func TestMongoRepository_GetPlayersByRank(t *testing.T) {
 	mongoRepo := NewMongoRepository(logger, client, "fdr", "draft", "fdr_user", "roster")
 	assert.Nil(t, err)
 
-	players, err := mongoRepo.GetPlayersByRank(context.TODO(), 100, 0)
+	players, err := mongoRepo.GetPlayersByRank(context.TODO(), 100, 0, 0)
 	assert.Nil(t, err)
 	assert.Equal(t, 100, len(players),)
 }
