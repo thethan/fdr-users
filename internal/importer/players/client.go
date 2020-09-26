@@ -178,7 +178,6 @@ func (c Service) QueuePlayersStats(ctx context.Context, guid string) {
 		}
 		offset += limit
 	}
-	return
 }
 
 // Start starts the import of user's playuers
@@ -208,7 +207,6 @@ func (s Service) Start(ctx context.Context, messageChannel <-chan entities2.Impo
 		}
 	}
 }
-
 
 // Start starts the import of user's playuers
 func (s Service) StartPlayersWorker(ctx context.Context, messageChannel <-chan entities2.ImportPlayer) error {
@@ -260,8 +258,7 @@ func (s *Service) getClientService(ctx context.Context, guid string) *http.Clien
 
 func (s Service) getAndSavePlayerStats(ctx context.Context, client *http.Client, playerKey string, week string) error {
 
-
-	level.Debug(s.logger).Log("message", "getAndSavePlayerStats", "player_key",  playerKey, "week" )
+	level.Debug(s.logger).Log("message", "getAndSavePlayerStats", "player_key", playerKey, "week")
 
 	resp, err := s.yahooService.GetPlayerResourceStats(ctx, client, playerKey, week)
 	if err != nil {
