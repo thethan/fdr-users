@@ -52,7 +52,7 @@ var (
 
 // MakeHTTPHandler returns a handler that makes a set of endpoints available
 // on predefined paths.
-func MakeHTTPHandler(logger log.Logger, endpoints players.Endpoints, m *mux.Router, authServerBefore httptransport.RequestFunc, options ...httptransport.ServerOption) *mux.Router {
+func MakeHTTPHandler(logger log.Logger, endpoints players.Endpoints, router *mux.Router, authServerBefore httptransport.RequestFunc, options ...httptransport.ServerOption) *mux.Router {
 	serverOptions := []httptransport.ServerOption{
 		httptransport.ServerBefore(headersToContext),
 		httptransport.ServerErrorEncoder(errorEncoder),
@@ -61,22 +61,20 @@ func MakeHTTPHandler(logger log.Logger, endpoints players.Endpoints, m *mux.Rout
 	serverOptions = append(serverOptions, options...)
 	serverOptionsAuth := append(serverOptions, httptransport.ServerBefore(authServerBefore))
 
-	m = m.PathPrefix("/leagues").Subrouter()
+	m := router.PathPrefix("/leagues").Subrouter()
 	m.Methods(http.MethodGet).Path("/{" + leagueIdParam + "}/players").Handler(httptransport.NewServer(
 		endpoints.GetAvailablePlayers,
 		DecodeHTTPGetAvailablePlayersForLeague,
 		EncodeHTTPGetAvailablePlayers,
 		serverOptionsAuth...,
 	))
-	return m
-
-	m.Methods(http.MethodPut).Path("/{+" + userGuid + "}/{" + leagueIdParam + "}/fdr-players-import").Handler(httptransport.NewServer(
+	router.Methods(http.MethodPut).Path("/{+" + userGuid + "}/{" + leagueIdParam + "}/fdr-players-import").Handler(httptransport.NewServer(
 		endpoints.SaveUsersDraftOrder,
 		DecodeHTTPSavePlayersOrders,
 		EncodeHTTPGetAvailablePlayers,
 		serverOptionsAuth...,
 	))
-	return m
+	return router
 }
 
 // ErrorEncoder writes the error to the ResponseWriter, by default a content

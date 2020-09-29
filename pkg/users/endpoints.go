@@ -18,6 +18,7 @@ import (
 	"github.com/go-kit/kit/transport/http"
 	"github.com/thethan/fdr-users/pkg/league"
 	"github.com/thethan/fdr-users/pkg/users/info"
+	"github.com/thethan/fdr-users/pkg/users/transports"
 	pb "github.com/thethan/fdr_proto"
 	"go.elastic.co/apm"
 	netHttp "net/http"
@@ -51,7 +52,7 @@ type Endpoints struct {
 
 // Endpoints
 
-func NewEndpoints(logger log.Logger, user info.GetUserInfo, saveInfo SaveUserInfo, oauthRepo OauthRepository, importer *league.Importer, authMiddleware endpoint.Middleware, serverBefore http.RequestFunc) Endpoints {
+func NewEndpoints(logger log.Logger, user info.GetUserInfo, saveInfo SaveUserInfo, oauthRepo transports.OauthRepository, importer *league.Importer, authMiddleware endpoint.Middleware, serverBefore http.RequestFunc) Endpoints {
 	// Business domain.
 	var service usersService
 	{
@@ -163,7 +164,7 @@ func MakeSaveInformationsEndpoint(s *usersService) endpoint.Endpoint {
 		span, ctx := apm.StartSpan(ctx, "SaveInformationEndpoint", "endpoint")
 		defer span.End()
 
-		req := request.(*UserCredentialRequest)
+		req := request.(*transports.UserCredentialRequest)
 		v, err := s.SaveFromUserID(ctx, req)
 		if err != nil {
 			return nil, err
@@ -178,7 +179,7 @@ func MakeGetUserLeaguesEndpoint(s *usersService) endpoint.Endpoint {
 		span, ctx := apm.StartSpan(ctx, "GetUserLeaguesEndpoint", "endpoint")
 		defer span.End()
 
-		req := request.(*UserCredentialRequest)
+		req := request.(*transports.UserCredentialRequest)
 		v, err := s.GetUsersLeagues(ctx, req)
 		if err != nil {
 			return nil, err

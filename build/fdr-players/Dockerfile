@@ -4,7 +4,7 @@ RUN apk --update add git less openssh && \
     rm -rf /var/lib/apt/lists/* && \
     rm /var/cache/apk/*
 
-WORKDIR $GOPATH/src/github.com/thethan/fdr-players
+WORKDIR $GOPATH/src/github.com/thethan/fdr-player-import
 RUN echo $GOPATH
 COPY . $WORKDIR
 
@@ -20,12 +20,12 @@ RUN go mod vendor
 RUN go build -o exec cmd/fdr-players/main.go
 RUN go mod download
 
-RUN go build -o fdr-playerss cmd/fdr-players/main.go
+RUN go build -o fdr-players-import cmd/fdr-players-import/main.go
 
 
 FROM base
 EXPOSE 8080 8081 8082
 RUN mkdir /certs/
 ADD serviceAccountKey.json /certs/serviceAccountKey.json
-COPY --from=builder  /go/src/github.com/thethan/fdr-players/fdr-players .
+COPY --from=builder  /go/src/github.com/thethan/fdr-player-import/fdr-players-import .
 CMD ./fdr-users

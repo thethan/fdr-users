@@ -3,7 +3,7 @@
 // Version: 8907ffca23
 // Version Date: Wed Nov 27 21:28:21 UTC 2019
 
-package users
+package transports
 
 // This file provides server-side bindings for the HTTP transport.
 // It utilizes the transport/http.Server.
@@ -16,6 +16,7 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/google/uuid"
 	"github.com/thethan/fdr-users/pkg/draft/entities"
+	"github.com/thethan/fdr-users/pkg/users"
 	"github.com/thethan/fdr-users/pkg/yahoo"
 	"go.elastic.co/apm"
 	"golang.org/x/oauth2"
@@ -54,7 +55,7 @@ var (
 
 // MakeHTTPHandler returns a handler that makes a set of endpoints available
 // on predefined paths.
-func MakeHTTPHandler(logger log.Logger, endpoints Endpoints, m *mux.Router, oauthRepository OauthRepository, authServerBefore httptransport.RequestFunc, options ...httptransport.ServerOption) *mux.Router {
+func MakeHTTPHandler(logger log.Logger, endpoints users.Endpoints, m *mux.Router, oauthRepository OauthRepository, authServerBefore httptransport.RequestFunc, options ...httptransport.ServerOption) *mux.Router {
 	serverOptions := []httptransport.ServerOption{
 		httptransport.ServerBefore(headersToContext),
 		httptransport.ServerErrorEncoder(errorEncoder),
@@ -365,7 +366,7 @@ func EncodeHTTPSaveCredentialByUserIDRequest(_ context.Context, w http.ResponseW
 
 func DecodeHTTPSaveCredentialRequest(_ context.Context, r *http.Request) (interface{}, error) {
 	defer r.Body.Close()
-	var req CredentialRequest
+	var req users.CredentialRequest
 	buf, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		return nil, errors.Wrapf(err, "cannot read body of http request")

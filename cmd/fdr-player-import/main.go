@@ -29,6 +29,7 @@ import (
 	repositories3 "github.com/thethan/fdr-users/pkg/players/repositories"
 	playersTransport "github.com/thethan/fdr-users/pkg/players/transports"
 	repositories2 "github.com/thethan/fdr-users/pkg/users/repositories"
+	transports2 "github.com/thethan/fdr-users/pkg/users/transports"
 	"github.com/thethan/fdr-users/pkg/yahoo"
 	"go.elastic.co/apm/module/apmgorilla"
 	"go.opentelemetry.io/otel/api/global"
@@ -135,7 +136,7 @@ func initTracer() func() {
 	flush, err := jaeger.InstallNewPipeline(
 		jaeger.WithCollectorEndpoint(os.Getenv("JAEGER_ENDPOINT")),
 		jaeger.WithProcess(jaeger.Process{
-			ServiceName: "fdr-fdr-players-import",
+			ServiceName: "fdr-players-import",
 			Tags: []label.KeyValue{
 				label.String("exporter", "jaeger"),
 				label.Float64("float", 312.23),
@@ -167,8 +168,8 @@ func main() {
 	exporter := initMeter()
 	initTracer()
 
-	_ = global.Tracer("fantasy.com/users")
-	_ = global.Meter("fantasy.com/users")
+	_ = global.Tracer("fantasy.com/player-import")
+	_ = global.Meter("fantasy.com/player-import")
 
 	logger := gokitLogrus.NewLogrusLogger(logrusLogger)
 	logger = log.WithPrefix(logger, "caller_a", log.DefaultCaller, "caller_b", log.Caller(2), "caller_c", log.Caller(1))
@@ -237,7 +238,7 @@ func main() {
 	playerService := players.NewService(logger, mongoRepo)
 	playersEndpoint := players.NewEndpoint(logger, &playerService, authSvc.NewAuthMiddleware(), authSvc.GetUserInfoFromContextMiddleware(&repo))
 
-	users.MakeHTTPHandler(logger, endpoints, ogGrouter, &oauthRepo, authSvc.ServerBefore)
+	transports2.MakeHTTPHandler(logger, endpoints, ogGrouter, &oauthRepo, authSvc.ServerBefore)
 	draftTransports.MakeHTTPHandler(logger, draftEndpoints, ogGrouter, authSvc.ServerBefore)
 	playersTransport.MakeHTTPHandler(logger, playersEndpoint, ogGrouter, authSvc.ServerBefore)
 
@@ -308,7 +309,7 @@ func main() {
 				errc <- err
 			}
 
-			srv := users.MakeGRPCServer(endpoints)
+			srv := transports2.MakeGRPCServer(endpoints)
 
 			authInterceptor := grpc_auth.UnaryServerInterceptor(authSvc.ServerAuthentication(ctx, logger))
 			apmInterceptor := apmgrpc.NewUnaryServerInterceptor()

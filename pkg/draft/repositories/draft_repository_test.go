@@ -14,7 +14,7 @@ import (
 func TestMongoRepository_GetTeamsForManagers(t *testing.T) {
 
 	logger := test_helpers.LogrusLogger(t)
-	client, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
+	client, err := mongo.NewMongoDBClient(context.TODO(), os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
 	assert.Nil(t, err)
 	if t.Failed() {
 		t.FailNow()
@@ -28,7 +28,7 @@ func TestMongoRepository_GetTeamsForManagers(t *testing.T) {
 
 func TestMongoRepository_GetPlayers(t *testing.T) {
 	logger := test_helpers.LogrusLogger(t)
-	client, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
+	client, err := mongo.NewMongoDBClient(context.TODO(), os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
 	assert.Nil(t, err)
 	if t.Failed() {
 		t.FailNow()
@@ -46,7 +46,7 @@ func TestMongoRepository_GetPlayers(t *testing.T) {
 
 func TestMongoRepository_GetTeamsForLeague(t *testing.T) {
 	logger := test_helpers.LogrusLogger(t)
-	client, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
+	client, err := mongo.NewMongoDBClient(context.TODO(), os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
 	assert.Nil(t, err)
 	if t.Failed() {
 		t.FailNow()
@@ -62,7 +62,7 @@ func TestMongoRepository_GetTeamsForLeague(t *testing.T) {
 
 func TestMongoRepository_SaveDraftOrder(t *testing.T) {
 	logger := test_helpers.LogrusLogger(t)
-	client, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
+	client, err := mongo.NewMongoDBClient(context.TODO(), os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
 	assert.Nil(t, err)
 	if t.Failed() {
 		t.FailNow()
@@ -91,7 +91,7 @@ func TestMongoRepository_SaveDraftOrder(t *testing.T) {
 
 func TestMongoRepository_GetDraftResults(t *testing.T) {
 	logger := test_helpers.LogrusLogger(t)
-	client, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
+	client, err := mongo.NewMongoDBClient(context.TODO(), os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
 	assert.Nil(t, err)
 	if t.Failed() {
 		t.FailNow()
@@ -116,7 +116,7 @@ func TestMongoRepository_GetDraftResults(t *testing.T) {
 
 func TestMongoRepository_GetTeamDraftResultsByTeam(t *testing.T) {
 	logger := test_helpers.LogrusLogger(t)
-	client, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
+	client, err := mongo.NewMongoDBClient(context.TODO(), os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
 	assert.Nil(t, err)
 	if t.Failed() {
 		t.FailNow()
@@ -134,7 +134,7 @@ func TestMongoRepository_GetTeamDraftResultsByTeam(t *testing.T) {
 
 func TestMongoRepository_GetAvailablePlayersForDraft(t *testing.T) {
 	logger := test_helpers.LogrusLogger(t)
-	client, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
+	client, err := mongo.NewMongoDBClient(context.TODO(), os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
 	assert.Nil(t, err)
 	if t.Failed() {
 		t.FailNow()
@@ -180,7 +180,7 @@ func TestMongoRepository_GetAvailablePlayersForDraft(t *testing.T) {
 
 func TestMongoRepository_ImportLeagueAvailablePlayers(t *testing.T) {
 	logger := test_helpers.LogrusLogger(t)
-	client, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
+	client, err := mongo.NewMongoDBClient(context.TODO(), os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
 	assert.Nil(t, err)
 	if t.Failed() {
 		t.FailNow()
@@ -198,7 +198,7 @@ func TestMongoRepository_ImportLeagueAvailablePlayers(t *testing.T) {
 
 func TestMongoRepository_SaveUserPlayerPreference(t *testing.T) {
 	logger := test_helpers.LogrusLogger(t)
-	client, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
+	client, err := mongo.NewMongoDBClient(context.TODO(), os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
 	assert.Nil(t, err)
 	if t.Failed() {
 		t.FailNow()
@@ -227,7 +227,7 @@ func TestMongoRepository_SaveUserPlayerPreference(t *testing.T) {
 
 func TestMongoRepository_GetUserPreference(t *testing.T) {
 	logger := test_helpers.LogrusLogger(t)
-	client, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
+	client, err := mongo.NewMongoDBClient(context.TODO(), os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
 	assert.Nil(t, err)
 	if t.Failed() {
 		t.FailNow()
@@ -249,7 +249,7 @@ func TestMongoRepository_GetUserPreference(t *testing.T) {
 
 func TestMongoRepository_GetPlayersByRank(t *testing.T) {
 	logger := test_helpers.LogrusLogger(t)
-	client, err := mongo.NewMongoDBClient(os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
+	client, err := mongo.NewMongoDBClient(context.TODO(), os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
 	assert.Nil(t, err)
 	if t.Failed() {
 		t.FailNow()

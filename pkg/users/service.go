@@ -11,6 +11,7 @@ import (
 	"github.com/thethan/fdr-users/pkg/league"
 	"github.com/thethan/fdr-users/pkg/users/entities"
 	"github.com/thethan/fdr-users/pkg/users/info"
+	"github.com/thethan/fdr-users/pkg/users/transports"
 	"github.com/thethan/fdr-users/pkg/yahoo"
 	"go.elastic.co/apm"
 	"golang.org/x/oauth2"
@@ -30,7 +31,7 @@ type SaveUserInfo interface {
 }
 
 // NewService returns a naïve, stateless implementation of Service.
-func NewService(logger log.Logger, info info.GetUserInfo, saveUserInfo SaveUserInfo, oauthRepo OauthRepository, importer league.NewImporterService) usersService {
+func NewService(logger log.Logger, info info.GetUserInfo, saveUserInfo SaveUserInfo, oauthRepo transports.OauthRepository, importer league.NewImporterService) usersService {
 	return usersService{
 		logger:       logger,
 		userInfo:     info,
@@ -45,7 +46,7 @@ type usersService struct {
 	userInfo     info.GetUserInfo
 	saveUserInfo SaveUserInfo
 	importer     league.NewImporterService
-	oauthRepo    OauthRepository
+	oauthRepo    transports.OauthRepository
 }
 
 // Create implements Service.
@@ -111,11 +112,11 @@ func (n NoopGetUserInformation) GetCredentialInformation(ctx context.Context, se
 	return entities.User{AccessToken: n.AccessToken}, nil
 }
 
-func (s usersService) SaveFromUserID(ctx context.Context, in *UserCredentialRequest) (*UserCredentialResponse, error) {
+func (s usersService) SaveFromUserID(ctx context.Context, in *transports.UserCredentialRequest) (*transports.UserCredentialResponse, error) {
 	span, ctx := apm.StartSpan(ctx, "SaveFromUserID", "handlers.service")
 	defer span.End()
 
-	var resp UserCredentialResponse
+	var resp transports.UserCredentialResponse
 	yahooService := yahoo.NewService(s.logger, NoopGetUserInformation{AccessToken: in.Session})
 	userResource, err := yahooService.GetUserResourcesGameLeaguesResponse(ctx)
 	if err != nil {
@@ -144,7 +145,7 @@ func (s usersService) SaveFromUserID(ctx context.Context, in *UserCredentialRequ
 		go importer.ImportFromUser(ctx, userResource)
 	}
 
-	resp = UserCredentialResponse{
+	resp = transports.UserCredentialResponse{
 		UID:          userResource.Users.User.Guid,
 		Session:      user.AccessToken,
 		RefreshToken: user.RefreshToken,
@@ -187,11 +188,11 @@ func (s usersService) SaveYahooCredential(ctx context.Context, in *CredentialReq
 	return &resp, nil
 }
 
-func (s usersService) GetUsersLeagues(ctx context.Context, in *UserCredentialRequest) (*UserCredentialResponse, error) {
+func (s usersService) GetUsersLeagues(ctx context.Context, in *transports.UserCredentialRequest) (*transports.UserCredentialResponse, error) {
 	span, ctx := apm.StartSpan(ctx, "GetUsersLeagues", "handlers.service")
 	defer span.End()
 
-	var resp UserCredentialResponse
+	var resp transports.UserCredentialResponse
 	tokenInterface := ctx.Value(consts.FirebaseToken)
 
 	token, ok := tokenInterface.(*firebaseAuth.Token)
@@ -236,7 +237,7 @@ func (s usersService) GetUsersLeagues(ctx context.Context, in *UserCredentialReq
 	wg.Done()
 	wg.Wait()
 
-	resp = UserCredentialResponse{
+	resp = transports.UserCredentialResponse{
 		UID:   token.UID,
 		Email: token.Claims["email"].(string),
 		Guid:  token.Claims["yahoo_guid"].(string),
@@ -263,6 +264,7 @@ func (service usersService) YahooCallback(ctx context.Context, r *http.Request) 
 		return err
 	}
 	level.Debug(service.logger).Log("msg", "token received", "token", token)
+	// todo put into a queue
 	content, err := getUserGameInfoFromYahoo(ctx, token)
 	level.Debug(service.logger).Log("content", string(content))
 
@@ -288,7 +290,7 @@ func getUserInfo(ctx context.Context, logger log.Logger, state string, code stri
 	if state == "" {
 		return nil, fmt.Errorf("invalid OauthConfig state")
 	}
-	token, err := OauthConfig.Exchange(ctx, code)
+	token, err := transports.OauthConfig.Exchange(ctx, code)
 	if err != nil {
 		return nil, fmt.Errorf("code exchange failed: %s", err.Error())
 	}
