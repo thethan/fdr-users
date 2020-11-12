@@ -59,7 +59,7 @@ func TestImporter_ImportLeagueFromUser(t *testing.T) {
 
 	mongoRepo := repositories.NewMongoRepository(logger, mongoClient, "fdr", "draft", "fdr_user", "roster")
 
-	svc := NewImportService(logger, yahooService, &mongoRepo)
+	svc := NewImportService(logger, yahooService, &mongoRepo, nil)
 
 	leagueGroups, err := svc.ImportLeagueFromUser(ctx)
 	assert.Nil(t, err)
@@ -104,7 +104,7 @@ func TestImporter_ImportGamePlayers(t *testing.T) {
 
 	mongoRepo := repositories.NewMongoRepository(logger, mongoClient, "fdr", "draft", "fdr_user", "roster")
 
-	svc := NewImportService(logger, yahooService, &mongoRepo)
+	svc := NewImportService(logger, yahooService, &mongoRepo, nil)
 
 	err = svc.ImportGamePlayers(ctx, 399)
 	assert.Nil(t, err)
@@ -141,7 +141,7 @@ func TestImporter_ImportDraftResult(t *testing.T) {
 
 	mongoRepo := repositories.NewMongoRepository(logger, mongoClient, "fdr", "draft", "fdr_user", "roster")
 
-	svc := NewImportService(logger, yahooService, &mongoRepo)
+	svc := NewImportService(logger, yahooService, &mongoRepo, nil)
 
 	_, err = svc.ImportDraftResults(ctx, "380.l.53275")
 	assert.Nil(t, err)
@@ -178,7 +178,7 @@ func TestImporter_ImportDraftResultForUser(t *testing.T) {
 
 	mongoRepo := repositories.NewMongoRepository(logger, mongoClient, "fdr", "draft", "fdr_user", "roster")
 
-	svc := NewImportService(logger, yahooService, &mongoRepo)
+	svc := NewImportService(logger, yahooService, &mongoRepo, nil)
 
 	 err = svc.ImportDraftResultsForUser(ctx, "MFG5HMFDHC634Q7W2FPKJBVTKY")
 	assert.Nil(t, err)
@@ -215,7 +215,7 @@ func TestImporter_ImportPlayersFromGamesForUser(t *testing.T) {
 
 	mongoRepo := repositories.NewMongoRepository(logger, mongoClient, "fdr", "draft", "fdr_user", "roster")
 
-	svc := NewImportService(logger, yahooService, &mongoRepo)
+	svc := NewImportService(logger, yahooService, &mongoRepo, nil)
 
 	err = svc.ImportGamePlayersUserHasAccessTo(ctx, "MFG5HMFDHC634Q7W2FPKJBVTKY")
 	assert.Nil(t, err)

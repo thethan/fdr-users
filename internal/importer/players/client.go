@@ -9,6 +9,7 @@ import (
 	entities2 "github.com/thethan/fdr-users/pkg/players/entities"
 	"github.com/thethan/fdr-users/pkg/yahoo"
 	"go.elastic.co/apm"
+	"go.opentelemetry.io/otel"
 	"golang.org/x/oauth2"
 	"net/http"
 	"strconv"
@@ -23,7 +24,7 @@ type Queue interface {
 }
 
 type playersRepo interface {
-	GetPlayersByRank(ctx context.Context, limit, offset int) ([]pkgEntities.PlayerSeason, error)
+	GetPlayersByRank(ctx context.Context, limit, offset, gameID int) ([]pkgEntities.PlayerSeason, error)
 	SavePlayers(context.Context, []pkgEntities.PlayerSeason) ([]pkgEntities.PlayerSeason, error)
 }
 
@@ -50,15 +51,20 @@ type Service struct {
 	oauthConfig  *oauth2.Config
 	clientGuid   map[string]*http.Client
 	mu           *sync.RWMutex
+	tracer       otel.Tracer
+	meter        otel.Meter
 }
 
 // NewImporterClient will take
-func NewImporterClient(logger log.Logger, playerRepo playersRepo, queuer Queue, yahooRepo *yahoo2.YahooRepository, statsRepo SavePlayerStats) Service {
-	return Service{logger: logger, playersRepo: playerRepo, queuer: queuer, yahooService: yahooRepo, statsRepo: statsRepo, mu: &sync.RWMutex{}}
+func NewImporterClient(logger log.Logger, playerRepo playersRepo, oauthRepo oauthRepo, queuer Queue, yahooRepo *yahoo2.YahooRepository, statsRepo SavePlayerStats, tracer otel.Tracer, meter otel.Meter) Service {
+	return Service{logger: logger, playersRepo: playerRepo, queuer: queuer, oauthRepo: oauthRepo, yahooService: yahooRepo, statsRepo: statsRepo, mu: &sync.RWMutex{}, tracer: tracer, meter: meter}
 }
 
 // QueuePlayers
 func (c Service) QueueAllPlayers(ctx context.Context, guid string, gameID int) {
+	ctx, span := c.tracer.Start(ctx, "QueueAllPlayers")
+	defer span.End()
+
 	counter := 0
 	count := 25
 	for counter < 60 {
@@ -146,11 +152,11 @@ func transformYahooSeasonStats(ctx context.Context, yahooPlayer yahoo.GameResour
 }
 
 // QueuePlayersStats
-func (c Service) QueuePlayersStats(ctx context.Context, guid string) {
+func (c Service) QueuePlayersStats(ctx context.Context, guid string, gameID int) {
 	limit := 100
 	offset := 0
 	for {
-		players, err := c.playersRepo.GetPlayersByRank(ctx, limit, offset)
+		players, err := c.playersRepo.GetPlayersByRank(ctx, limit, 0, offset)
 		if err != nil {
 			level.Error(c.logger).Log("message", "could not get fdr-players-import by rank", "error", err, "offset", offset, "limit", limit)
 			return
@@ -178,7 +184,6 @@ func (c Service) QueuePlayersStats(ctx context.Context, guid string) {
 		}
 		offset += limit
 	}
-	return
 }
 
 // Start starts the import of user's playuers
@@ -208,7 +213,6 @@ func (s Service) Start(ctx context.Context, messageChannel <-chan entities2.Impo
 		}
 	}
 }
-
 
 // Start starts the import of user's playuers
 func (s Service) StartPlayersWorker(ctx context.Context, messageChannel <-chan entities2.ImportPlayer) error {
@@ -260,8 +264,7 @@ func (s *Service) getClientService(ctx context.Context, guid string) *http.Clien
 
 func (s Service) getAndSavePlayerStats(ctx context.Context, client *http.Client, playerKey string, week string) error {
 
-
-	level.Debug(s.logger).Log("message", "getAndSavePlayerStats", "player_key",  playerKey, "week" )
+	level.Debug(s.logger).Log("message", "getAndSavePlayerStats", "player_key", playerKey, "week")
 
 	resp, err := s.yahooService.GetPlayerResourceStats(ctx, client, playerKey, week)
 	if err != nil {

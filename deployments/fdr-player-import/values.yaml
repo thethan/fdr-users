@@ -92,3 +92,5 @@ mongo:
 kubemq:
   service: kubemq-cluster-grpc.kubemq
   port: 50000
+jaeger:
+  endpoint: "http://jaeger-collector.jaeger:14268/api/traces"

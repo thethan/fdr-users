@@ -1,6 +1,6 @@
 module github.com/thethan/fdr-users
 
-go 1.13
+go 1.15
 
 require (
 	cloud.google.com/go/firestore v1.2.0
@@ -21,22 +21,21 @@ require (
 	github.com/stretchr/testify v1.6.1
 	github.com/thethan/fdr_proto v0.0.0-20200417043340-bff7591e2122
 	go.elastic.co/apm v1.8.0
-	go.elastic.co/apm/module/apmgorilla v1.8.0
 	go.elastic.co/apm/module/apmgrpc v1.8.0
-	go.elastic.co/apm/module/apmhttp v1.8.0
 	go.elastic.co/apm/module/apmlogrus v1.8.0
-	go.elastic.co/apm/module/apmmongo v1.8.0
-	go.mongodb.org/mongo-driver v1.4.0
+	go.mongodb.org/mongo-driver v1.4.1
 	go.opencensus.io v0.22.4
-	go.opentelemetry.io/contrib/instrumentation/github.com/gorilla/mux v0.11.0
-	go.opentelemetry.io/contrib/instrumentation/go.mongodb.org/mongo-driver v0.11.0
-	go.opentelemetry.io/contrib/instrumentation/net/http/httptrace v0.11.0
-	go.opentelemetry.io/otel v0.11.0
-	go.opentelemetry.io/otel/exporters/metric/prometheus v0.11.0
-	go.opentelemetry.io/otel/exporters/trace/jaeger v0.11.0
-	go.opentelemetry.io/otel/sdk v0.11.0
-	golang.org/x/net v0.0.0-20200707034311-ab3426394381
-	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
-	google.golang.org/api v0.30.0
-	google.golang.org/grpc v1.31.0
+	go.opentelemetry.io/contrib/instrumentation/github.com/gorilla/mux/otelmux v0.12.0
+	go.opentelemetry.io/contrib/instrumentation/go.mongodb.org/mongo-driver/mongo/otelmongo v0.12.0
+	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.12.0
+	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.12.0
+	go.opentelemetry.io/otel v0.12.0
+	go.opentelemetry.io/otel/exporters/metric/prometheus v0.12.0
+	go.opentelemetry.io/otel/exporters/trace/jaeger v0.12.0
+	go.opentelemetry.io/otel/sdk v0.12.0
+	golang.org/x/oauth2 v0.0.0-20200902213428-5d25da1a8d43
+	google.golang.org/api v0.32.0
+	google.golang.org/grpc v1.32.0
+	google.golang.org/grpc/examples v0.0.0-20201002194053-b2c5f4a808fd // indirect
+
 )

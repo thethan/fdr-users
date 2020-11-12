@@ -3,13 +3,14 @@
 // Version: 8907ffca23
 // Version Date: Wed Nov 27 21:28:21 UTC 2019
 
-package users
+package transports
 
 // This file provides server-side bindings for the gRPC transport.
 // It utilizes the transport/grpc.Server.
 
 import (
 	"context"
+	"github.com/thethan/fdr-users/pkg/users"
 	"net/http"
 
 	"google.golang.org/grpc/metadata"
@@ -21,7 +22,7 @@ import (
 )
 
 // MakeGRPCServer makes a set of endpoints available as a gRPC UsersServer.
-func MakeGRPCServer(endpoints Endpoints, options ...grpctransport.ServerOption) pb.UsersServer {
+func MakeGRPCServer(endpoints users.Endpoints, options ...grpctransport.ServerOption) pb.UsersServer {
 	serverOptions := []grpctransport.ServerOption{
 		grpctransport.ServerBefore(metadataToContext),
 	}
@@ -29,31 +30,6 @@ func MakeGRPCServer(endpoints Endpoints, options ...grpctransport.ServerOption) 
 	return &grpcServer{
 		// fdr-users
 
-		create: grpctransport.NewServer(
-			endpoints.CreateEndpoint,
-			DecodeGRPCCreateRequest,
-			EncodeGRPCCreateResponse,
-			serverOptions...,
-		),
-		search: grpctransport.NewServer(
-			endpoints.SearchEndpoint,
-			DecodeGRPCSearchRequest,
-			EncodeGRPCSearchResponse,
-			serverOptions...,
-		),
-		login: grpctransport.NewServer(
-			endpoints.LoginEndpoint,
-			DecodeGRPCLoginRequest,
-			EncodeGRPCLoginResponse,
-			serverOptions...,
-		),
-
-		credentials: grpctransport.NewServer(
-			endpoints.CredentialEndpoint,
-			DecodeGRPCCredentialsRequest,
-			EncodeGRPCCredentialsResponse,
-			serverOptions...,
-		),
 	}
 }
 

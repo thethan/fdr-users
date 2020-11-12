@@ -14,23 +14,17 @@ import (
 	"github.com/grpc-ecosystem/go-grpc-middleware"
 	grpc_auth "github.com/grpc-ecosystem/go-grpc-middleware/auth"
 	"github.com/oklog/run"
-	players2 "github.com/thethan/fdr-users/internal/importer/players"
-	yahoo2 "github.com/thethan/fdr-users/internal/importer/repositories/yahoo"
-	"github.com/thethan/fdr-users/pkg/coordinator/transports"
-	"github.com/thethan/fdr-users/pkg/draft"
-	"github.com/thethan/fdr-users/pkg/draft/repositories"
-	draftTransports "github.com/thethan/fdr-users/pkg/draft/transports"
+	repositories2 "github.com/thethan/fdr-users/internal/oauth/repositories"
+	"github.com/thethan/fdr-users/internal/oauth/yahoo"
+	handlers2 "github.com/thethan/fdr-users/internal/oauth/yahoo/handlers"
+	yahoo3 "github.com/thethan/fdr-users/internal/yahoo"
+	otelmux "go.opentelemetry.io/contrib/instrumentation/github.com/gorilla/mux/otelmux"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/otel/sdk/metric/controller/pull"
+	"go.opentelemetry.io/otel/sdk/resource"
+
 	"github.com/thethan/fdr-users/pkg/kubemq"
-	"github.com/thethan/fdr-users/pkg/league"
 	"github.com/thethan/fdr-users/pkg/mongo"
-	"github.com/thethan/fdr-users/pkg/players"
-	"github.com/thethan/fdr-users/pkg/players/entities"
-	"github.com/thethan/fdr-users/pkg/players/importer/queue"
-	repositories3 "github.com/thethan/fdr-users/pkg/players/repositories"
-	playersTransport "github.com/thethan/fdr-users/pkg/players/transports"
-	repositories2 "github.com/thethan/fdr-users/pkg/users/repositories"
-	"github.com/thethan/fdr-users/pkg/yahoo"
-	"go.elastic.co/apm/module/apmgorilla"
 	"go.opentelemetry.io/otel/api/global"
 	"go.opentelemetry.io/otel/exporters/trace/jaeger"
 	"go.opentelemetry.io/otel/label"
@@ -42,25 +36,19 @@ import (
 	"syscall"
 
 	firebase2 "github.com/thethan/fdr-users/pkg/firebase"
-	"go.elastic.co/apm/module/apmgrpc"
 	"google.golang.org/api/option"
 
 	firebase "firebase.google.com/go"
 	gokitLogrus "github.com/go-kit/kit/log/logrus"
 	"github.com/sirupsen/logrus"
 	"github.com/thethan/fdr-users/pkg/auth"
-	"github.com/thethan/fdr-users/pkg/coordinator"
-	"go.elastic.co/apm"
-	"go.elastic.co/apm/module/apmlogrus"
+
 	"go.opentelemetry.io/otel/exporters/metric/prometheus"
 	"google.golang.org/grpc"
 	"net"
 	"os"
 
 	"github.com/thethan/fdr-users/handlers"
-	"github.com/thethan/fdr-users/pkg/users"
-	// This Service
-	pb "github.com/thethan/fdr_proto"
 )
 
 var DefaultConfig Config
@@ -120,11 +108,9 @@ func init() {
 		ClientID:     os.Getenv("YAHOO_CLIENT_ID"),
 		ClientSecret: os.Getenv("YAHOO_CLIENT_SECRET"),
 		Scopes:       []string{"fspt-w"},
-		Endpoint:     yahoo.Endpoint,
+		Endpoint:     yahoo3.Endpoint,
 	}
 
-	apm.DefaultTracer.SetLogger(logrusLogger)
-	logrusLogger.AddHook(&apmlogrus.Hook{})
 }
 
 // initTracer creates a new trace provider instance and registers it as global trace provider.
@@ -142,7 +128,7 @@ func initTracer() func() {
 		jaeger.WithSDK(&sdktrace.Config{DefaultSampler: sdktrace.AlwaysSample()}),
 	)
 	if err != nil {
-		panic("tracerr not made")
+		panic("tracer not made")
 	}
 
 	return func() {
@@ -151,7 +137,13 @@ func initTracer() func() {
 }
 
 func initMeter() *prometheus.Exporter {
-	exporter, err := prometheus.InstallNewPipeline(prometheus.Config{})
+	exporter, err := prometheus.NewExportPipeline(
+		prometheus.Config{
+			DefaultHistogramBoundaries: []float64{-0.5, 1},
+		},
+		pull.WithCachePeriod(0),
+		pull.WithResource(resource.New(label.String("R", "V"))),
+	)
 	if err != nil {
 		panic("Could not init Meter")
 	}
@@ -165,38 +157,30 @@ func main() {
 	exporter := initMeter()
 	initTracer()
 
-	_ = global.Tracer("fantasy.com/users")
-	_ = global.Meter("fantasy.com/users")
+	tracer := global.Tracer("fantasydraftroom.com/users")
+	meter := global.Meter("fantasydraftroom.com/users")
 
 	logger := gokitLogrus.NewLogrusLogger(logrusLogger)
 	logger = log.WithPrefix(logger, "caller_a", log.DefaultCaller, "caller_b", log.Caller(2), "caller_c", log.Caller(1))
 
-	firestoreclient, firebaseauthclient := initializeAppDefault(ctx, DefaultConfig, logger)
+	_, firebaseauthclient := initializeAppDefault(ctx, DefaultConfig, logger)
 
-	repo := firebase2.NewFirebaseRepository(logger, firestoreclient, firebaseauthclient)
+	//repo := firebase2.NewFirebaseRepository(logger, firestoreclient, firebaseauthclient)
 	authRepo := firebase2.NewFirestoreAuthRepo(logger, firebaseauthclient)
-
 	authSvc := auth.NewAuthService(logger, &authRepo)
-
-	yahooProvider := yahoo.NewService(logger, &repo)
+	authMiddleware := authSvc.NewAuthMiddleware(tracer, meter)
 
 	mongoClient, err := mongo.NewMongoDBClient(ctx, os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
 	if err != nil {
 		logger.Log("message", "error in initializing mongo client", "error", err)
 		os.Exit(1)
 	}
-	mongoRepo := repositories.NewMongoRepository(logger, mongoClient, "fdr", "draft", "fdr_user", "roster")
-	importService := league.NewImportService(logger, yahooProvider, &mongoRepo)
-	coordinatorEndpoints := coordinator.NewEndpoints(logrusLogger, importService, authSvc.NewAuthMiddleware())
-	_ = transports.NewServer(logger, logrusLogger, coordinatorEndpoints)
-	oauthRepo := repositories2.NewMongoOauthRepository(logger, mongoClient)
-	endpoints := users.NewEndpoints(logger, &repo, &repo, &oauthRepo, &importService, authSvc.NewAuthMiddleware(), authSvc.ServerBefore)
 
-	//err := func(ctx context.Context) {
-	//	var span trace.Span
-	//	ctx, span = tracer.Start(ctx, "Starting service ...")
-	//	span.End(trace.WithEndTime(time.Now()))
-	//}(ctx)
+	oauthRepo := repositories2.NewMongoOauthRepository(logger, mongoClient, tracer)
+	oauthYahooService := yahoo.NewOauthYahooService(logger, tracer, oauthConfig, &oauthRepo)
+
+	oauthYahooEndpoints := handlers2.NewYahooHandlersEndpoints(logger, oauthConfig, tracer, &oauthYahooService, authMiddleware)
+
 	var kubemqConfig KubemqConfig
 	err = env.Parse(&kubemqConfig)
 	if err != err {
@@ -211,45 +195,22 @@ func main() {
 	}
 
 	defer kubemqClient.Close()
-
-	kubemqDraftRepo := kubemq.NewDraftRepository(logger, kubemqClient)
-
 	ogGrouter := mux.NewRouter()
+	ogGrouter.Use(otelmux.Middleware("fdr-users"))
+	// prometheus metrics
+	ogGrouter.Path("/metrics").HandlerFunc(exporter.ServeHTTP)
 
+	hamboneCount, err := meter.NewInt64Counter("hambone_counter")
 	ogGrouter.Methods(http.MethodGet).PathPrefix("/hambone").HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		_, _ = writer.Write([]byte("hambone"))
+		hamboneCount.Add(request.Context(), 1)
+		_, _ = writer.Write([]byte("hambone gonna get you"))
 		writer.WriteHeader(http.StatusAccepted)
-
 	})
 
-	apmgorilla.Instrument(ogGrouter)
-	transports.NewHTTPServer(logrusLogger, ogGrouter, coordinatorEndpoints, authSvc.ServerBefore)
+	ogGrouter = handlers2.MakeHTTPHandler(logger, oauthYahooEndpoints, ogGrouter, authSvc.ServerBefore, tracer)
 
-	// draft
-	draftService := draft.NewService(logger, mongoRepo, &kubemqDraftRepo)
-	draftEndpoints := draft.NewEndpoints(logger, &draftService, &authSvc, authSvc.NewAuthMiddleware(), authSvc.GetUserInfoFromContextMiddleware(&repo))
-
-	// fdr-players-import
-	playerService := players.NewService(logger, mongoRepo)
-	playersEndpoint := players.NewEndpoint(logger, &playerService, authSvc.NewAuthMiddleware(), authSvc.GetUserInfoFromContextMiddleware(&repo))
-
-	users.MakeHTTPHandler(logger, endpoints, ogGrouter, &oauthRepo, authSvc.ServerBefore)
-	draftTransports.MakeHTTPHandler(logger, draftEndpoints, ogGrouter, authSvc.ServerBefore)
-	playersTransport.MakeHTTPHandler(logger, playersEndpoint, ogGrouter, authSvc.ServerBefore)
-
-	// player stats repo
-	importPlayerStat := make(chan entities.ImportPlayerStat, 1)
-	importPlayerChannel := make(chan entities.ImportPlayer, 1)
-	queuer := queue.NewQueueImportStats(logger, kubemqClient)
-	yahooService := yahoo2.NewYahooRepository(logger, oauthConfig)
-	statsRepo := repositories3.NewMongoStatsRepo(logger, mongoClient)
-	// new importer
-	importerService := players2.NewImporterClient(logger, &mongoRepo, &queuer, &yahooService, statsRepo)
 	// Mechanical domain.
 	errc := make(chan error)
-
-	apm.DefaultTracer.SetLogger(logrusLogger)
-	logrusLogger.AddHook(&apmlogrus.Hook{})
 
 	// Interrupt handler.
 	go handlers.InterruptHandler(errc)
@@ -284,7 +245,6 @@ func main() {
 	{
 		g.Add(func() error {
 			ln, _ := net.Listen("tcp", DefaultConfig.HTTPAddr)
-			http.HandleFunc("/", exporter.ServeHTTP)
 			return http.Serve(ln,
 				muxhandlers.CORS(muxhandlers.AllowedHeaders([]string{
 					"X-Requested-With",
@@ -304,50 +264,15 @@ func main() {
 				errc <- err
 			}
 
-			srv := users.MakeGRPCServer(endpoints)
-
 			authInterceptor := grpc_auth.UnaryServerInterceptor(authSvc.ServerAuthentication(ctx, logger))
-			apmInterceptor := apmgrpc.NewUnaryServerInterceptor()
+			apmInterceptor := otelgrpc.UnaryServerInterceptor(tracer)
 			middlewareInterceptor := grpc_middleware.ChainUnaryServer(apmInterceptor, authInterceptor)
 
 			//grpc.UnaryInterceptor(grpc_auth.UnaryServerInterceptor(authSvc.ServerAuthentication(ctx, logger))
-			s := grpc.NewServer(grpc.UnaryInterceptor(middlewareInterceptor))
-			pb.RegisterUsersServer(s, srv)
+			s := grpc.NewServer(grpc.UnaryInterceptor(middlewareInterceptor), grpc.StreamInterceptor(otelgrpc.StreamServerInterceptor(tracer)))
 
 			return s.Serve(ln)
 		}, func(err error) {
-		})
-	}
-	{
-		// sender
-		g.Add(func() error {
-			return queuer.StartPlayerWorker(ctx, importPlayerChannel)
-		}, func(err error) {
-			errc <- err
-		})
-	}
-	{
-		// worker
-		g.Add(func() error {
-			return queuer.StartWorker(ctx, importPlayerStat)
-		}, func(err error) {
-			errc <- err
-		})
-	}
-	{
-		// workerProcessor
-		g.Add(func() error {
-			return importerService.Start(ctx, importPlayerStat)
-		}, func(err error) {
-			errc <- err
-		})
-	}
-	{
-		// workerProcessor
-		g.Add(func() error {
-			return importerService.StartPlayersWorker(ctx, importPlayerChannel)
-		}, func(err error) {
-			errc <- err
 		})
 	}
 	{
@@ -385,14 +310,11 @@ func initializeAppDefault(ctx context.Context, config Config, logger log.Logger)
 }
 
 func initializeFirestore(ctx context.Context, logger log.Logger, app *firebase.App) *firestore.Client {
-
 	firestoreClient, err := app.Firestore(ctx)
 	if err != nil {
 		level.Error(logger).Log("message", "error in setting up firestore")
-
 		os.Exit(1)
 	}
-
 	return firestoreClient
 }
 

@@ -11,16 +11,11 @@ package users
 // formats.
 
 import (
-	"context"
 	"github.com/go-kit/kit/endpoint"
 	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
 	"github.com/go-kit/kit/transport/http"
 	"github.com/thethan/fdr-users/pkg/league"
 	"github.com/thethan/fdr-users/pkg/users/info"
-	pb "github.com/thethan/fdr_proto"
-	"go.elastic.co/apm"
-	netHttp "net/http"
 )
 
 // Endpoints collects all of the endpoints that compose an add service. It's
@@ -37,167 +32,18 @@ import (
 // single type that implements the Service interface. For example, you might
 // construct individual endpoints using transport/http.NewClient, combine them into an Endpoints, and return it to the caller as a Service.
 type Endpoints struct {
-	CreateEndpoint         endpoint.Endpoint
-	SearchEndpoint         endpoint.Endpoint
-	LoginEndpoint          endpoint.Endpoint
-	CredentialEndpoint     endpoint.Endpoint
-	SaveCredentialEndpoint endpoint.Endpoint
-	SaveUserInfoEndpoint   endpoint.Endpoint
-	GetUserLeagues         endpoint.Endpoint
-
-	YahooCallbackEndpoint endpoint.Endpoint
-	logger                log.Logger
+	logger log.Logger
 }
 
 // Endpoints
 
-func NewEndpoints(logger log.Logger, user info.GetUserInfo, saveInfo SaveUserInfo, oauthRepo OauthRepository, importer *league.Importer, authMiddleware endpoint.Middleware, serverBefore http.RequestFunc) Endpoints {
-	// Business domain.
-	var service usersService
-	{
-		service = NewService(logger, user, saveInfo, oauthRepo, importer)
-
-	}
-
+func NewEndpoints(logger log.Logger, user info.GetUserInfo, saveInfo SaveUserInfo, importer *league.Importer, authMiddleware endpoint.Middleware, serverBefore http.RequestFunc) Endpoints {
 	// Endpoint domain.
-	var (
-		createEndpoint          = MakeCreateEndpoint(&service)
-		searchEndpoint          = MakeSearchEndpoint(&service)
-		loginEndpoint           = MakeLoginEndpoint(&service)
-		getCredentialsEndpoint  = MakeCredentialsEndpoint(&service, user)
-		saveCredentialsEndpoint = authMiddleware(MakeSaveCredentialsEndpoint(&service))
-		saveUserInfoEndpoint    = MakeSaveInformationsEndpoint(&service)
-		getUserLeagueEndpoint   = authMiddleware(MakeGetUserLeaguesEndpoint(&service))
-		yahooEndpoint           = MakeYahooCallback(logger, &service)
-	)
 
 	endpoints := Endpoints{
 		logger:                 logger,
-		CreateEndpoint:         createEndpoint,
-		SearchEndpoint:         searchEndpoint,
-		LoginEndpoint:          loginEndpoint,
-		CredentialEndpoint:     getCredentialsEndpoint,
-		SaveCredentialEndpoint: saveCredentialsEndpoint,
-		SaveUserInfoEndpoint:   saveUserInfoEndpoint,
-		GetUserLeagues:         getUserLeagueEndpoint,
-		YahooCallbackEndpoint:  yahooEndpoint,
 	}
 
 	// Wrap selected Endpoints with middlewares. See handlers/middlewares.go
 	return endpoints
-}
-
-// Make Endpoints
-func MakeCreateEndpoint(s pb.UsersServer) endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		span, ctx := apm.StartSpan(ctx, "CreateEndpoint", "endpoint")
-		defer span.End()
-
-		req := request.(*pb.CreateUserRequest)
-		v, err := s.Create(ctx, req)
-		if err != nil {
-			return nil, err
-		}
-		return v, nil
-	}
-}
-
-func MakeSearchEndpoint(s pb.UsersServer) endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		span, ctx := apm.StartSpan(ctx, "ListEndpoint", "endpoint")
-		defer span.End()
-
-		req := request.(*pb.ListUserRequest)
-		v, err := s.Search(ctx, req)
-		if err != nil {
-			return nil, err
-		}
-		return v, nil
-	}
-}
-
-func MakeLoginEndpoint(s pb.UsersServer) endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		span, ctx := apm.StartSpan(ctx, "LoginEndpoint", "endpoint")
-		defer span.End()
-
-		req := request.(*pb.LoginRequest)
-		v, err := s.Login(ctx, req)
-		if err != nil {
-			return nil, err
-		}
-		return v, nil
-	}
-}
-
-func MakeCredentialsEndpoint(s pb.UsersServer, user info.GetUserInfo) endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		span, ctx := apm.StartSpan(ctx, "CredentialsEndpoint", "endpoint")
-		defer span.End()
-
-		req := request.(*pb.CredentialRequest)
-		v, err := s.Credentials(ctx, req)
-		if err != nil {
-			return nil, err
-		}
-		return v, nil
-	}
-}
-
-func MakeSaveCredentialsEndpoint(s *usersService) endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		span, ctx := apm.StartSpan(ctx, "SaveCredentialsEndpoint", "endpoint")
-		defer span.End()
-
-		req := request.(*CredentialRequest)
-		v, err := s.SaveYahooCredential(ctx, req)
-		if err != nil {
-			return nil, err
-		}
-		return v, nil
-	}
-}
-
-func MakeSaveInformationsEndpoint(s *usersService) endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		span, ctx := apm.StartSpan(ctx, "SaveInformationEndpoint", "endpoint")
-		defer span.End()
-
-		req := request.(*UserCredentialRequest)
-		v, err := s.SaveFromUserID(ctx, req)
-		if err != nil {
-			return nil, err
-		}
-		return v, nil
-	}
-
-}
-
-func MakeGetUserLeaguesEndpoint(s *usersService) endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		span, ctx := apm.StartSpan(ctx, "GetUserLeaguesEndpoint", "endpoint")
-		defer span.End()
-
-		req := request.(*UserCredentialRequest)
-		v, err := s.GetUsersLeagues(ctx, req)
-		if err != nil {
-			return nil, err
-		}
-		return v, nil
-	}
-}
-
-func MakeYahooCallback(logger log.Logger, s *usersService) endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		level.Debug(logger).Log("message", "Starting Yahoo Callback", "req", request)
-		span, ctx := apm.StartSpan(ctx, "YahooCallBack", "endpoint")
-		defer span.End()
-
-		req := request.(*netHttp.Request)
-		err = s.YahooCallback(ctx, req)
-		if err != nil {
-			return nil, err
-		}
-		return nil, nil
-	}
 }

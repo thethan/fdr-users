@@ -19,8 +19,6 @@ func NewHTTPServer(fieldLogger logrus.FieldLogger, m *mux.Router, endpoints coor
 		httptransport.ServerBefore(authServerBefore),
 	}
 
-
-
 	m.Methods(http.MethodGet).PathPrefix("/importer/leagues").HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.WriteHeader(http.StatusAlreadyReported)
 	})
@@ -36,6 +34,13 @@ func NewHTTPServer(fieldLogger logrus.FieldLogger, m *mux.Router, endpoints coor
 	))
 	m.Methods("POST").Path("/importer/games/{game_id}/players").Handler(httptransport.NewServer(
 		endpoints.ImportGamePlayers,
+		DecodeHTTPImportGamePlayersRequest(fieldLogger),
+		EncodeHTTPDecodeImportGamePlayersRequest(fieldLogger),
+		options...,
+	))
+
+	m.Methods("POST").Path("/importer/games/{game_id}/players/stats").Handler(httptransport.NewServer(
+		endpoints.ImportGamePlayerStats,
 		DecodeHTTPImportGamePlayersRequest(fieldLogger),
 		EncodeHTTPDecodeImportGamePlayersRequest(fieldLogger),
 		options...,

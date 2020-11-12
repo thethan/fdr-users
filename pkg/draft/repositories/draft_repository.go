@@ -513,7 +513,7 @@ func (m MongoRepository) GetPlayers(ctx context.Context, playerKeys []string) ([
 
 	return players, nil
 }
-func (m MongoRepository) GetPlayersByRank(ctx context.Context, limit, offset int) ([]entities.PlayerSeason, error) {
+func (m MongoRepository) GetPlayersByRank(ctx context.Context, limit, offset, gameID int) ([]entities.PlayerSeason, error) {
 	span, ctx := apm.StartSpan(ctx, "GetPlayersByRank", "repository.Mongo")
 	defer func() {
 		span.End()
@@ -521,11 +521,12 @@ func (m MongoRepository) GetPlayersByRank(ctx context.Context, limit, offset int
 
 	collection := m.client.Database(database).Collection(playersBySeason)
 
-	filter := bson.D{}
+	filter := bson.D{{"game_id", gameID}}
 	findOptions := options.Find()
 
 	findOptions.SetSort(bson.D{{"game_id", -1}, {"ranks.yahoo", 1}})
 	findOptions.SetLimit(int64(limit))
+	findOptions.SetSkip(int64(limit))
 
 	results, err := collection.Find(ctx, filter, findOptions)
 	if err != nil {

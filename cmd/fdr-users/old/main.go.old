@@ -11,45 +11,58 @@ import (
 	"github.com/go-kit/kit/log/level"
 	muxhandlers "github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
+	"github.com/grpc-ecosystem/go-grpc-middleware"
+	grpc_auth "github.com/grpc-ecosystem/go-grpc-middleware/auth"
 	"github.com/oklog/run"
-	"github.com/thethan/fdr-users/handlers"
 	players2 "github.com/thethan/fdr-users/internal/importer/players"
 	yahoo2 "github.com/thethan/fdr-users/internal/importer/repositories/yahoo"
 	repositories2 "github.com/thethan/fdr-users/internal/oauth/repositories"
-	yahoo4 "github.com/thethan/fdr-users/internal/oauth/yahoo"
-	"github.com/thethan/fdr-users/pkg/auth"
-	"github.com/thethan/fdr-users/pkg/coordinator"
+	yahoo3 "github.com/thethan/fdr-users/internal/yahoo"
 	"github.com/thethan/fdr-users/pkg/coordinator/transports"
+	"github.com/thethan/fdr-users/pkg/draft"
 	"github.com/thethan/fdr-users/pkg/draft/repositories"
-	firebase2 "github.com/thethan/fdr-users/pkg/firebase"
-	kubemq3 "github.com/thethan/fdr-users/pkg/kubemq"
+	draftTransports "github.com/thethan/fdr-users/pkg/draft/transports"
+	"github.com/thethan/fdr-users/pkg/kubemq"
 	"github.com/thethan/fdr-users/pkg/league"
 	"github.com/thethan/fdr-users/pkg/mongo"
 	"github.com/thethan/fdr-users/pkg/players"
 	"github.com/thethan/fdr-users/pkg/players/entities"
 	"github.com/thethan/fdr-users/pkg/players/importer/queue"
 	repositories3 "github.com/thethan/fdr-users/pkg/players/repositories"
+	playersTransport "github.com/thethan/fdr-users/pkg/players/transports"
+	transports2 "github.com/thethan/fdr-users/pkg/users/transports"
 	"github.com/thethan/fdr-users/pkg/yahoo"
-	"go.opentelemetry.io/contrib/instrumentation/github.com/gorilla/mux/otelmux"
+	"go.elastic.co/apm/module/apmgorilla"
 	"go.opentelemetry.io/otel/api/global"
 	"go.opentelemetry.io/otel/exporters/trace/jaeger"
 	"go.opentelemetry.io/otel/label"
-
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"golang.org/x/oauth2"
-	"google.golang.org/api/option"
-	"net"
 	"net/http"
 	"os/signal"
 	"strings"
 	"syscall"
 
+	firebase2 "github.com/thethan/fdr-users/pkg/firebase"
+	"go.elastic.co/apm/module/apmgrpc"
+	"google.golang.org/api/option"
+
 	firebase "firebase.google.com/go"
+	gokitLogrus "github.com/go-kit/kit/log/logrus"
 	"github.com/sirupsen/logrus"
+	"github.com/thethan/fdr-users/pkg/auth"
+	"github.com/thethan/fdr-users/pkg/coordinator"
 	"go.elastic.co/apm"
 	"go.elastic.co/apm/module/apmlogrus"
 	"go.opentelemetry.io/otel/exporters/metric/prometheus"
+	"google.golang.org/grpc"
+	"net"
 	"os"
+
+	"github.com/thethan/fdr-users/handlers"
+	"github.com/thethan/fdr-users/pkg/users"
+	// This Service
+	pb "github.com/thethan/fdr_proto"
 )
 
 var DefaultConfig Config
@@ -104,7 +117,13 @@ func init() {
 		os.Exit(1)
 	}
 
-	oauthConfig = yahoo4.Oauth2Config()
+	oauthConfig = &oauth2.Config{
+		RedirectURL:  os.Getenv("YAHOO_CLIENT_REDIRECT"),
+		ClientID:     os.Getenv("YAHOO_CLIENT_ID"),
+		ClientSecret: os.Getenv("YAHOO_CLIENT_SECRET"),
+		Scopes:       []string{"fspt-w"},
+		Endpoint:     yahoo3.Endpoint,
+	}
 
 	apm.DefaultTracer.SetLogger(logrusLogger)
 	logrusLogger.AddHook(&apmlogrus.Hook{})
@@ -116,7 +135,7 @@ func initTracer() func() {
 	flush, err := jaeger.InstallNewPipeline(
 		jaeger.WithCollectorEndpoint(os.Getenv("JAEGER_ENDPOINT")),
 		jaeger.WithProcess(jaeger.Process{
-			ServiceName: "fdr-players-import",
+			ServiceName: "fdr-users",
 			Tags: []label.KeyValue{
 				label.String("exporter", "jaeger"),
 				label.Float64("float", 312.23),
@@ -148,20 +167,20 @@ func main() {
 	exporter := initMeter()
 	initTracer()
 
-	tracer := global.Tracer("fantasydraftroom.com/player-import")
-	metrics := global.Meter("fantasydraftroom.com/player-import")
+	_ = global.Tracer("fantasy.com/users")
+	_ = global.Meter("fantasy.com/users")
 
-	logger := log.NewJSONLogger(os.Stdout)
+	logger := gokitLogrus.NewLogrusLogger(logrusLogger)
 	logger = log.WithPrefix(logger, "caller_a", log.DefaultCaller, "caller_b", log.Caller(2), "caller_c", log.Caller(1))
 
-	firestoreClient, firebaseauthclient := initializeAppDefault(ctx, DefaultConfig, logger)
+	firestoreclient, firebaseauthclient := initializeAppDefault(ctx, DefaultConfig, logger)
 
+	repo := firebase2.NewFirebaseRepository(logger, firestoreclient, firebaseauthclient)
 	authRepo := firebase2.NewFirestoreAuthRepo(logger, firebaseauthclient)
 
 	authSvc := auth.NewAuthService(logger, &authRepo)
-	authMiddleware := authSvc.NewAuthMiddleware(tracer, metrics)
-	firebaseRepo := firebase2.NewFirebaseRepository(logger, firestoreClient, firebaseauthclient)
-	getUserInfoMiddleware := authSvc.UserInformationToContext(&firebaseRepo)
+
+	yahooProvider := yahoo.NewService(logger, &repo)
 
 	mongoClient, err := mongo.NewMongoDBClient(ctx, os.Getenv("MONGO_USERNAME"), os.Getenv("MONGO_PASSWORD"), os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
 	if err != nil {
@@ -169,9 +188,17 @@ func main() {
 		os.Exit(1)
 	}
 	mongoRepo := repositories.NewMongoRepository(logger, mongoClient, "fdr", "draft", "fdr_user", "roster")
+	importService := league.NewImportService(logger, yahooProvider, &mongoRepo)
+	coordinatorEndpoints := coordinator.NewEndpoints(logrusLogger, importService, authSvc.NewAuthMiddleware())
+	_ = transports.NewServer(logger, logrusLogger, coordinatorEndpoints)
+	oauthRepo := repositories2.NewMongoOauthRepository(logger, mongoClient)
+	endpoints := users.NewEndpoints(logger, &repo, &repo, &oauthRepo, &importService, authSvc.NewAuthMiddleware(), authSvc.ServerBefore)
 
-	oauthRepo := repositories2.NewMongoOauthRepository(logger, mongoClient, tracer)
-
+	//err := func(ctx context.Context) {
+	//	var span trace.Span
+	//	ctx, span = tracer.Start(ctx, "Starting service ...")
+	//	span.End(trace.WithEndTime(time.Now()))
+	//}(ctx)
 	var kubemqConfig KubemqConfig
 	err = env.Parse(&kubemqConfig)
 	if err != err {
@@ -179,14 +206,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	kubemqClient, err := kubemq3.NewKubeMQClient(ctx, kubemqConfig.Address, kubemqConfig.Port, kubemqConfig.ClientID)
+	kubemqClient, err := kubemq.NewKubeMQClient(ctx, kubemqConfig.Address, kubemqConfig.Port, kubemqConfig.ClientID)
 	if err != nil {
 		level.Error(logger).Log("message", "could initiate kubemq client", "error", err)
 		os.Exit(1)
 	}
 
+	defer kubemqClient.Close()
+
+	kubemqDraftRepo := kubemq.NewDraftRepository(logger, kubemqClient)
+
 	ogGrouter := mux.NewRouter()
-	ogGrouter.Use(otelmux.Middleware(os.Getenv("SERVICE_NAME")))
 
 	ogGrouter.Methods(http.MethodGet).PathPrefix("/hambone").HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		_, _ = writer.Write([]byte("hambone"))
@@ -194,13 +224,29 @@ func main() {
 
 	})
 
+	apmgorilla.Instrument(ogGrouter)
+	transports.NewHTTPServer(logrusLogger, ogGrouter, coordinatorEndpoints, authSvc.ServerBefore)
+
+	// draft
+	draftService := draft.NewService(logger, mongoRepo, &kubemqDraftRepo)
+	draftEndpoints := draft.NewEndpoints(logger, &draftService, &authSvc, authSvc.NewAuthMiddleware(), authSvc.GetUserInfoFromContextMiddleware(&repo))
+
 	// fdr-players-import
-	yahooRepository := yahoo2.NewYahooRepository(logger, oauthConfig, tracer, &metrics)
-	broadcastMq := queue.NewQueueImportStats(logger, kubemqClient)
+	playerService := players.NewService(logger, mongoRepo)
+	playersEndpoint := players.NewEndpoint(logger, &playerService, authSvc.NewAuthMiddleware(), authSvc.GetUserInfoFromContextMiddleware(&repo))
+
+	transports2.MakeHTTPHandler(logger, endpoints, ogGrouter, &oauthRepo, authSvc.ServerBefore)
+	draftTransports.MakeHTTPHandler(logger, draftEndpoints, ogGrouter, authSvc.ServerBefore)
+	playersTransport.MakeHTTPHandler(logger, playersEndpoint, ogGrouter, authSvc.ServerBefore)
+
+	// player stats repo
+	importPlayerStat := make(chan entities.ImportPlayerStat, 1)
+	importPlayerChannel := make(chan entities.ImportPlayer, 1)
+	queuer := queue.NewQueueImportStats(logger, kubemqClient)
+	yahooService := yahoo2.NewYahooRepository(logger, oauthConfig)
 	statsRepo := repositories3.NewMongoStatsRepo(logger, mongoClient)
 	// new importer
-	importerService := players2.NewImporterClient(logger, &mongoRepo, &oauthRepo, &broadcastMq, &yahooRepository, statsRepo, tracer, metrics)
-
+	importerService := players2.NewImporterClient(logger, &mongoRepo, &queuer, &yahooService, statsRepo)
 	// Mechanical domain.
 	errc := make(chan error)
 
@@ -235,17 +281,6 @@ func main() {
 		return nil
 	})
 
-	importPlayerChannel := make(chan entities.ImportPlayer, 25)
-	importPlayerStat := make(chan entities.ImportPlayerStat, 25)
-	defer close(importPlayerChannel)
-	defer close(importPlayerStat)
-	yahooService := yahoo.NewService(logger, &firebaseRepo)
-	leagueImportService := league.NewImportService(logger, yahooService, &mongoRepo, tracer)
-	coordinatorEndpoints := coordinator.NewEndpoints(logrusLogger, leagueImportService, authMiddleware)
-	ogGrouter = transports.NewHTTPServer(logrusLogger, ogGrouter, coordinatorEndpoints, authSvc.ServerBefore)
-	playersService := players.NewService(logger, mongoRepo)
-	players.NewEndpoint(logger, &playersService, authMiddleware, getUserInfoMiddleware)
-
 	// gRPC transport.
 	var g run.Group
 	{
@@ -263,9 +298,32 @@ func main() {
 		})
 	}
 	{
+		g.Add(func() error {
+
+			logger.Log("transport", "gRPC", "addr", DefaultConfig.GRPCAddr)
+			ln, err := net.Listen("tcp", DefaultConfig.GRPCAddr)
+			if err != nil {
+				errc <- err
+			}
+
+			srv := transports2.MakeGRPCServer(endpoints)
+
+			authInterceptor := grpc_auth.UnaryServerInterceptor(authSvc.ServerAuthentication(ctx, logger))
+			apmInterceptor := apmgrpc.NewUnaryServerInterceptor()
+			middlewareInterceptor := grpc_middleware.ChainUnaryServer(apmInterceptor, authInterceptor)
+
+			//grpc.UnaryInterceptor(grpc_auth.UnaryServerInterceptor(authSvc.ServerAuthentication(ctx, logger))
+			s := grpc.NewServer(grpc.UnaryInterceptor(middlewareInterceptor))
+			pb.RegisterUsersServer(s, srv)
+
+			return s.Serve(ln)
+		}, func(err error) {
+		})
+	}
+	{
 		// sender
 		g.Add(func() error {
-			return broadcastMq.StartPlayerWorker(ctx, importPlayerChannel)
+			return queuer.StartPlayerWorker(ctx, importPlayerChannel)
 		}, func(err error) {
 			errc <- err
 		})
@@ -273,7 +331,7 @@ func main() {
 	{
 		// worker
 		g.Add(func() error {
-			return broadcastMq.StartWorker(ctx, importPlayerStat)
+			return queuer.StartWorker(ctx, importPlayerStat)
 		}, func(err error) {
 			errc <- err
 		})

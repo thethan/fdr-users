@@ -3,7 +3,7 @@
 // Version: 8907ffca23
 // Version Date: Wed Nov 27 21:28:21 UTC 2019
 
-package users
+package transports
 
 // This file provides server-side bindings for the HTTP transport.
 // It utilizes the transport/http.Server.
@@ -14,15 +14,12 @@ import (
 	"fmt"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/google/uuid"
-	"github.com/thethan/fdr-users/pkg/draft/entities"
-	"github.com/thethan/fdr-users/pkg/yahoo"
+	"github.com/thethan/fdr-users/pkg/users"
+	userEntities "github.com/thethan/fdr-users/pkg/users/entities"
 	"go.elastic.co/apm"
-	"golang.org/x/oauth2"
 	"io"
 	"io/ioutil"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 
@@ -54,50 +51,14 @@ var (
 
 // MakeHTTPHandler returns a handler that makes a set of endpoints available
 // on predefined paths.
-func MakeHTTPHandler(logger log.Logger, endpoints Endpoints, m *mux.Router, oauthRepository OauthRepository, authServerBefore httptransport.RequestFunc, options ...httptransport.ServerOption) *mux.Router {
+func MakeHTTPHandler(logger log.Logger, endpoints users.Endpoints, m *mux.Router, authServerBefore httptransport.RequestFunc, options ...httptransport.ServerOption) *mux.Router {
 	serverOptions := []httptransport.ServerOption{
 		httptransport.ServerBefore(headersToContext),
 		httptransport.ServerErrorEncoder(errorEncoder),
 		httptransport.ServerAfter(httptransport.SetContentType(contentType)),
 	}
 	serverOptions = append(serverOptions, options...)
-	serverOptionsAuth := append(serverOptions, httptransport.ServerBefore(authServerBefore))
 
-	m = m.PathPrefix("/users").Subrouter()
-	m.Methods(
-		http.MethodGet).Path("/auth").Handler(
-		httptransport.NewServer(
-			endpoints.YahooCallbackEndpoint,
-			DecodeHTTPRequestToHTTPRequest(logger),
-			EncodeHTTPGenericResponse,
-		))
-	m.Methods(http.MethodGet).Path("/login").HandlerFunc(HandleYahooLogin)
-
-	m.Methods("POST").Path("/search").Handler(httptransport.NewServer(
-		endpoints.SearchEndpoint,
-		DecodeHTTPSearchZeroRequest,
-		EncodeHTTPGenericResponse,
-		serverOptionsAuth...,
-	))
-
-	m.Methods("POST").Path("/credentials").Handler(httptransport.NewServer(
-		endpoints.SaveCredentialEndpoint,
-		DecodeHTTPSaveCredentialRequest,
-		EncodeHTTPGenericResponse,
-		serverOptionsAuth...,
-	))
-	m.Methods("POST").Path("/info").Handler(httptransport.NewServer(
-		endpoints.SaveUserInfoEndpoint,
-		DecodeHTTPSaveCredentialByUserIDRequest,
-		EncodeHTTPSaveCredentialByUserIDRequest,
-		serverOptions...,
-	))
-	m.Methods(http.MethodGet).Path("/info").Handler(httptransport.NewServer(
-		endpoints.GetUserLeagues,
-		DecodeHTTPSaveCredentialByUserIDRequest,
-		EncodeHTTPSaveCredentialByUserIDRequest,
-		serverOptionsAuth...,
-	))
 	return m
 }
 
@@ -300,92 +261,22 @@ func serverBeforeHeaders(ctx context.Context, r *http.Request) context.Context {
 	return ctx
 }
 
-type UserCredentialRequest struct {
-	UID          string `json:"uid"`
-	Session      string `json:"session"`
-	RefreshToken string `json:"refresh_token"`
-	Guid         string `json:"guid"`
-
-	Email string `json:"email"`
-}
-
-type UserCredentialResponse struct {
-	UID          string                  `json:"uid"`
-	Session      string                  `json:"session"`
-	RefreshToken string                  `json:"refresh_token"`
-	Guid         string                  `json:"guid"`
-	Leagues      []*entities.LeagueGroup `json:"leagues"`
-	Email        string                  `json:"email"`
-}
-
-func DecodeHTTPSaveCredentialByUserIDRequest(ctx context.Context, r *http.Request) (interface{}, error) {
-	defer r.Body.Close()
-	var req UserCredentialRequest
-	buf, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		return nil, errors.Wrapf(err, "cannot read body of http request")
-	}
-	if len(buf) > 0 {
-		// AllowUnknownFields stops the unmarshaler from failing if the JSON contains unknown fields.
-		if err = json.Unmarshal(buf, &req); err != nil {
-			const size = 8196
-			if len(buf) > size {
-				buf = buf[:size]
-			}
-			return nil, httpError{errors.Wrapf(err, "request body '%s': cannot parse non-json request body", buf),
-				http.StatusBadRequest,
-				nil,
-			}
-		}
-	}
-
-	pathParams := mux.Vars(r)
-	_ = pathParams
-
-	queryParams := r.URL.Query()
-	_ = queryParams
-
-	return &req, err
-}
-
 // EncodeHTTPGenericResponse is a transport/http.EncodeResponseFunc that encodes
 // the response as JSON to the response writer. Primarily useful in a server.
-func EncodeHTTPSaveCredentialByUserIDRequest(_ context.Context, w http.ResponseWriter, response interface{}) error {
-	res, ok := response.(*UserCredentialResponse)
-	if !ok {
-		return errors.New("could not get user Credentials Response ")
-	}
-	bytesJson, err := json.Marshal(&res)
-	if err != nil {
-		return err
-	}
-	w.Write(bytesJson)
-	return nil
+
+type DecodeCredentialRequest struct {
+	Session string `protobuf:"bytes,1,opt,name=session,proto3" json:"session,omitempty"`
+	GUID    string `protobuf:"bytes,1,opt,name=session,proto3" json:"guid,omitempty"`
 }
 
 func DecodeHTTPSaveCredentialRequest(_ context.Context, r *http.Request) (interface{}, error) {
 	defer r.Body.Close()
-	var req CredentialRequest
+	var creds userEntities.Credentials
+	var req DecodeCredentialRequest
 	buf, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		return nil, errors.Wrapf(err, "cannot read body of http request")
 	}
-	//if len(buf) > 0 {
-	//	// AllowUnknownFields stops the unmarshaler from failing if the JSON contains unknown fields.
-	//	unmarshaller := jsonpb.Unmarshaler{
-	//		AllowUnknownFields: true,
-	//	}
-	//	if err = unmarshaller.Unmarshal(bytes.NewBuffer(buf), &req); err != nil {
-	//		consts size = 8196
-	//		if len(buf) > size {
-	//			buf = buf[:size]
-	//		}
-	//		return nil, httpError{errors.Wrapf(err, "request body '%s': cannot parse non-json request body", buf),
-	//			http.StatusBadRequest,
-	//			nil,
-	//		}
-	//	}
-	//}
 
 	err = json.Unmarshal(buf, &req)
 	if err != nil {
@@ -397,31 +288,10 @@ func DecodeHTTPSaveCredentialRequest(_ context.Context, r *http.Request) (interf
 	queryParams := r.URL.Query()
 	_ = queryParams
 
-	return &req, err
-}
+	creds.GUID = req.GUID
+	creds.Session = req.Session
 
-var (
-	OauthConfig      *oauth2.Config
-	oauthStateString = uuid.New().String()
-)
-
-func init() {
-	OauthConfig = &oauth2.Config{
-		RedirectURL:  os.Getenv("YAHOO_CLIENT_REDIRECT"),
-		ClientID:     os.Getenv("YAHOO_CLIENT_ID"),
-		ClientSecret: os.Getenv("YAHOO_CLIENT_SECRET"),
-		Scopes:       []string{"fspt-w"},
-		Endpoint:     yahoo.Endpoint,
-	}
-}
-
-func HandleYahooLogin(w http.ResponseWriter, r *http.Request) {
-	url := OauthConfig.AuthCodeURL(oauthStateString)
-	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
-}
-
-type OauthRepository interface {
-	SaveOauthToken(ctx context.Context, uuid string, token oauth2.Token) error
+	return &creds, err
 }
 
 //     protected $fillable = ['access_token', 'expires_in', 'token_type', 'refresh_token', 'xoauth_yahoo_guid'];

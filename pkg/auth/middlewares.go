@@ -13,6 +13,7 @@ import (
 	"github.com/thethan/fdr-users/pkg/firebase"
 	"github.com/thethan/fdr-users/pkg/users/info"
 	"go.elastic.co/apm"
+	"go.opentelemetry.io/otel"
 	"net/http"
 	"strings"
 
@@ -103,10 +104,16 @@ func (a AuthService) UserInformationToContext(userInfo info.GetUserInfo) endpoin
 	}
 }
 
-func (a AuthService) NewAuthMiddleware() endpoint.Middleware {
+func (a AuthService) NewAuthMiddleware(tracer otel.Tracer, meter otel.Meter) endpoint.Middleware {
+	counter, err := meter.NewInt64Counter("auth_middleware", )
+	if err != nil {
+
+		panic("error in init counter")
+	}
 	return func(next endpoint.Endpoint) endpoint.Endpoint {
 		return func(ctx context.Context, request interface{}) (interface{}, error) {
-			span, ctx := apm.StartSpan(ctx, "NewAuthMiddleware", "middleware")
+			counter.Add(ctx, 1,)
+			ctx, span := tracer.Start(ctx, "NewAuthMiddleware", )
 			defer span.End()
 
 			tokenIface := ctx.Value(BearerToken)

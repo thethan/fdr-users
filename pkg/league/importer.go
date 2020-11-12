@@ -10,6 +10,7 @@ import (
 	"github.com/thethan/fdr-users/pkg/draft/entities"
 	"github.com/thethan/fdr-users/pkg/yahoo"
 	"go.elastic.co/apm"
+	"go.opentelemetry.io/otel"
 	"sort"
 	"strconv"
 	"strings"
@@ -127,13 +128,15 @@ type Importer struct {
 	repo           SaveLeagueInfoIFace
 	queue          kubemq.KubemqClient
 	playerImporter *players.Service
+	tracer         otel.Tracer
 }
 
-func NewImportService(logger log.Logger, yahooService *yahoo.Service, repo SaveLeagueInfoIFace) Importer {
+func NewImportService(logger log.Logger, yahooService *yahoo.Service, repo SaveLeagueInfoIFace, tracer otel.Tracer) Importer {
 	return Importer{
 		logger:       logger,
 		yahooService: yahooService,
 		repo:         repo,
+		tracer:       tracer,
 	}
 }
 
