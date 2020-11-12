@@ -8,8 +8,8 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/thethan/fdr-users/pkg/users/entities"
 	"go.elastic.co/apm"
-	"go.elastic.co/apm/module/apmhttp"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"io/ioutil"
 	"net/http"
 	"strings"
@@ -34,9 +34,10 @@ type Service struct {
 type ServiceOptions func()
 
 func NewService(logger log.Logger, information UserInformation, ) *Service {
-	client := apmhttp.WrapClient(&http.Client{
-		Timeout: 5 * time.Second,
-	})
+	client := &http.Client{
+		Timeout:   5 * time.Second,
+		Transport: otelhttp.NewTransport(http.DefaultTransport),
+	}
 	svc := Service{logger: logger, userRepo: information, client: client}
 	return &svc
 }
@@ -2413,8 +2414,6 @@ type PlayerResourcesStatsResponse struct {
 func (s *Service) WithHttpClient(client *http.Client) {
 	s.client = client
 }
-
-
 
 func (s *Service) GetPlayerResourcesStats(ctx context.Context, playerKey string, week int) (*PlayerResourcesStats, error) {
 	var weekString string

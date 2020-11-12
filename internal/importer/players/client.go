@@ -9,6 +9,7 @@ import (
 	entities2 "github.com/thethan/fdr-users/pkg/players/entities"
 	"github.com/thethan/fdr-users/pkg/yahoo"
 	"go.elastic.co/apm"
+	"go.opentelemetry.io/otel"
 	"golang.org/x/oauth2"
 	"net/http"
 	"strconv"
@@ -50,15 +51,20 @@ type Service struct {
 	oauthConfig  *oauth2.Config
 	clientGuid   map[string]*http.Client
 	mu           *sync.RWMutex
+	tracer       otel.Tracer
+	meter        otel.Meter
 }
 
 // NewImporterClient will take
-func NewImporterClient(logger log.Logger, playerRepo playersRepo, queuer Queue, yahooRepo *yahoo2.YahooRepository, statsRepo SavePlayerStats) Service {
-	return Service{logger: logger, playersRepo: playerRepo, queuer: queuer, yahooService: yahooRepo, statsRepo: statsRepo, mu: &sync.RWMutex{}}
+func NewImporterClient(logger log.Logger, playerRepo playersRepo, oauthRepo oauthRepo, queuer Queue, yahooRepo *yahoo2.YahooRepository, statsRepo SavePlayerStats, tracer otel.Tracer, meter otel.Meter) Service {
+	return Service{logger: logger, playersRepo: playerRepo, queuer: queuer, oauthRepo: oauthRepo, yahooService: yahooRepo, statsRepo: statsRepo, mu: &sync.RWMutex{}, tracer: tracer, meter: meter}
 }
 
 // QueuePlayers
 func (c Service) QueueAllPlayers(ctx context.Context, guid string, gameID int) {
+	ctx, span := c.tracer.Start(ctx, "QueueAllPlayers")
+	defer span.End()
+
 	counter := 0
 	count := 25
 	for counter < 60 {

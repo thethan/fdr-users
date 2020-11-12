@@ -11,7 +11,7 @@ import (
 	"golang.org/x/oauth2"
 )
 
-func (i Importer) ImportGamePlayers(ctx context.Context, gameID int) error {
+func (i Importer) ImportGamePlayers(ctx context.Context, gameID int, ) error {
 	// count is 25
 	counter := 0
 	count := 25
@@ -54,10 +54,9 @@ func (i Importer) ImportPlayerStats(ctx context.Context, gameID int) error {
 }
 
 func (i Importer) ImportGamePlayersUserHasAccessTo(ctx context.Context, guid string) error {
-	span, ctx := apm.StartSpan(ctx, "ImportGamePlayersUserHasAccessTo", "service")
-	defer func() {
-		span.End()
-	}()
+	ctx, span := i.tracer.Start(ctx, "ImportGamePlayersUserHasAccessTo", nil)
+	defer span.End()
+
 	user, ok := ctx.Value(auth.User).(entities.User)
 	if !ok {
 		return errors.New("could not get user from auth")
@@ -70,10 +69,7 @@ func (i Importer) ImportGamePlayersUserHasAccessTo(ctx context.Context, guid str
 	for _, league := range leagues {
 		if imported, ok := gameHashMap[league.Game.GameID]; !imported || !ok {
 			go i.playerImporter.QueueAllPlayers(ctx, user.Guid, league.Game.GameID)
-			//err = i.ImportGamePlayers(ctx, league.Game.GameID)
-			if err != nil {
-				level.Error(i.logger).Log("message", "error in importing game", "err", err, "game_id", league.Game.GameID)
-			}
+
 			gameHashMap[league.Game.GameID] = true
 		}
 	}

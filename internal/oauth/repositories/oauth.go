@@ -5,10 +5,11 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"go.elastic.co/apm"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/label"
 	"golang.org/x/oauth2"
 	"time"
 )
@@ -18,12 +19,14 @@ const Oauth string = "yahoo_users"
 type Repository struct {
 	logger log.Logger
 	client *mongo.Client
+	tracer otel.Tracer
 }
 
-func NewMongoOauthRepository(logger log.Logger, client *mongo.Client) Repository {
+func NewMongoOauthRepository(logger log.Logger, client *mongo.Client, tracer otel.Tracer) Repository {
 	return Repository{
 		logger: logger,
 		client: client,
+		tracer: tracer,
 	}
 }
 
@@ -77,7 +80,8 @@ func oauthUserToOauth(oauth2Token oauthUser) oauth2.Token {
 }
 
 func (r *Repository) SaveOauthToken(ctx context.Context, uuid string, token oauth2.Token) error {
-	span, ctx := apm.StartSpan(ctx, "SaveOauthToken", "repository.Mongo")
+	ctx, span := r.tracer.Start(ctx, "SaveOauthToken")
+	span.SetAttributes(label.String("user_guid", uuid))
 	defer span.End()
 
 	user := oauth2TokenToUserToken(token)
@@ -98,7 +102,8 @@ func (r *Repository) SaveOauthToken(ctx context.Context, uuid string, token oaut
 }
 
 func (r *Repository) GetUserOAuthToken(ctx context.Context, guid string) (oauth2.Token, error) {
-	span, ctx := apm.StartSpan(ctx, "GetUserOAuthToken", "repository.Mongo")
+	ctx, span := r.tracer.Start(ctx, "GetUserOAuthToken")
+	span.SetAttributes(label.String("user_guid", guid))
 	defer span.End()
 
 	var user oauthUser

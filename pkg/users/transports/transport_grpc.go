@@ -30,31 +30,6 @@ func MakeGRPCServer(endpoints users.Endpoints, options ...grpctransport.ServerOp
 	return &grpcServer{
 		// fdr-users
 
-		create: grpctransport.NewServer(
-			endpoints.CreateEndpoint,
-			DecodeGRPCCreateRequest,
-			EncodeGRPCCreateResponse,
-			serverOptions...,
-		),
-		search: grpctransport.NewServer(
-			endpoints.SearchEndpoint,
-			DecodeGRPCSearchRequest,
-			EncodeGRPCSearchResponse,
-			serverOptions...,
-		),
-		login: grpctransport.NewServer(
-			endpoints.LoginEndpoint,
-			DecodeGRPCLoginRequest,
-			EncodeGRPCLoginResponse,
-			serverOptions...,
-		),
-
-		credentials: grpctransport.NewServer(
-			endpoints.CredentialEndpoint,
-			DecodeGRPCCredentialsRequest,
-			EncodeGRPCCredentialsResponse,
-			serverOptions...,
-		),
 	}
 }
 

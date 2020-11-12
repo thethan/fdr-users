@@ -17,7 +17,7 @@ ENV GITHUB_TOKEN "ba062a1cfe39f478cfe35dc44663d084c76dada4"
 RUN git config --global url."https://thethan:${GITHUB_TOKEN}@github.com".insteadOf "https://github.com"
 RUN mkdir /certs/
 RUN go mod vendor
-RUN go build -o exec cmd/fdr-players/main.go
+RUN go build -o exec cmd/fdr-player-import/main.go
 RUN go mod download
 
 RUN go build -o fdr-players-import cmd/fdr-players-import/main.go

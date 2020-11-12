@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"github.com/go-kit/kit/log"
 	"github.com/thethan/fdr-users/pkg/yahoo"
-	"go.opencensus.io/trace"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/httptrace"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/label"
 	"golang.org/x/oauth2"
 	"io/ioutil"
 	"net/http"
@@ -17,10 +18,12 @@ import (
 type YahooRepository struct {
 	logger log.Logger
 	conf   *oauth2.Config
+	tracer otel.Tracer
+	meter  *otel.Meter
 }
 
-func NewYahooRepository(logger log.Logger, conf *oauth2.Config) YahooRepository {
-	return YahooRepository{logger: logger, conf: conf}
+func NewYahooRepository(logger log.Logger, conf *oauth2.Config, tracer otel.Tracer, meter *otel.Meter) YahooRepository {
+	return YahooRepository{logger: logger, conf: conf, tracer: tracer, meter: meter}
 }
 
 type ClientOption struct {
@@ -28,9 +31,8 @@ type ClientOption struct {
 }
 
 func (y YahooRepository) GetPlayerResourceStats(ctx context.Context, client *http.Client, playerKey string, week string) (*yahoo.PlayerResourcesStats, error) {
-	ctx, span := trace.StartSpan(ctx, "GetPlayerResourceStats")
-	span.AddAttributes(trace.StringAttribute("player_key", playerKey))
-	span.AddAttributes(trace.StringAttribute("week", week))
+	ctx, span := y.tracer.Start(ctx, "GetPlayerResourceStats")
+	span.SetAttributes(label.String("player_key", playerKey), label.String("week", week))
 
 	defer span.End()
 
@@ -39,9 +41,7 @@ func (y YahooRepository) GetPlayerResourceStats(ctx context.Context, client *htt
 		weekString = fmt.Sprintf(";type=week;week=%s", week)
 	}
 	url := fmt.Sprintf("https://fantasysports.yahooapis.com/fantasy/v2/player/%s/stats%s", playerKey, weekString)
-
-	req, _ := http.NewRequest("GET", url, nil)
-	_, req = httptrace.W3C(ctx, req)
+	req, _ := http.NewRequestWithContext(ctx, "GET", url, nil)
 
 	res, err := client.Do(req)
 	if err != nil {
@@ -64,17 +64,15 @@ func (y YahooRepository) GetPlayerResourceStats(ctx context.Context, client *htt
 
 // GetGameResourcesPlayers
 func (s *YahooRepository) GetGameResourcesPlayers(ctx context.Context, client *http.Client, gameKey int, start, count int) (yahoo.GameResourcePlayerResponse, error) {
-	ctx, span := trace.StartSpan(ctx, "GetGameResourcesPlayers")
-	span.AddAttributes(trace.StringAttribute("game_id", strconv.Itoa(gameKey)))
-	span.AddAttributes(trace.Int64Attribute("offset", int64(count)))
-	span.AddAttributes(trace.Int64Attribute("start", int64(start)))
+	client.Transport = otelhttp.NewTransport(http.DefaultTransport)
 
+	ctx, span := s.tracer.Start(ctx, "GetGameResourcesPlayers")
+	span.SetAttributes(label.String("game_id", strconv.Itoa(gameKey)), label.Int64("offset", int64(count)), label.Int64("start", int64(start)))
 	defer span.End()
 
 	v := yahoo.GameResourcePlayerResponse{}
 	url := fmt.Sprintf("https://fantasysports.yahooapis.com/fantasy/v2/game/%d/fdr-players-import/stats?start=%d&count=%d", gameKey, start, count)
-	req, _ := http.NewRequest("GET", url, nil)
-	_, req = httptrace.W3C(ctx, req)
+	req, _ := http.NewRequestWithContext(ctx, "GET", url, nil)
 
 	res, err := client.Do(req)
 
